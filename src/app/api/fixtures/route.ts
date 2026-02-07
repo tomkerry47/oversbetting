@@ -54,10 +54,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch from API
+    console.log(`No fixtures in DB for ${saturdayDate}, fetching from API...`);
     const apiFixtures = await fetchSaturdayFixtures(saturdayDate);
+    console.log(`API returned ${apiFixtures.length} fixtures`);
 
     if (apiFixtures.length === 0) {
-      return NextResponse.json({ week, fixtures: [] });
+      console.warn('No 15:00 fixtures found for this Saturday');
+      return NextResponse.json({ week, fixtures: [], message: 'No 15:00 fixtures available for this Saturday' });
     }
 
     // Store fixtures in DB
@@ -94,6 +97,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/fixtures/refresh - Force refresh fixtures from the API.
+ * Rate limited: only once per hour.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -109,7 +113,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active week found' }, { status: 404 });
     }
 
+    // Check for existing fixtures and rate limit
+    const { data: existingFixtures } = await supabase
+      .from('fixtures')
+      .select('created_at')
+      .eq('week_id', week.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existingFixtures) {
+      const lastFetch = new Date(existingFixtures.created_at);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      if (lastFetch > oneHourAgo) {
+        const minutesLeft = Math.ceil((lastFetch.getTime() - oneHourAgo.getTime()) / (60 * 1000));
+        return NextResponse.json(
+          { error: `Please wait ${minutesLeft} more minute${minutesLeft !== 1 ? 's' : ''} before refreshing` },
+          { status: 429 }
+        );
+      }
+    }
+
+    console.log(`Fetching fixtures from API for ${saturdayDate}`);
     const apiFixtures = await fetchSaturdayFixtures(saturdayDate);
+    console.log(`API returned ${apiFixtures.length} fixtures`);
 
     const fixtureRows = apiFixtures.map((f) => ({
       api_fixture_id: f.fixture.id,
@@ -132,11 +160,14 @@ export async function POST(request: NextRequest) {
       .select();
 
     if (error) {
+      console.error('DB insert error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    console.log(`Stored ${fixtures?.length || 0} fixtures in DB`);
     return NextResponse.json({ week, fixtures });
   } catch (err: any) {
+    console.error('Fixtures refresh error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

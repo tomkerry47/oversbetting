@@ -51,9 +51,19 @@ export default function HomePage() {
 
   const handleRefreshFixtures = async () => {
     setRefreshing(true);
+    setError(null);
     try {
-      await fetch('/api/fixtures', { method: 'POST' });
+      const res = await fetch('/api/fixtures', { method: 'POST' });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.error || 'Failed to refresh fixtures');
+        return;
+      }
+      
       await fetchData();
+    } catch (err) {
+      setError('Network error, please try again');
     } finally {
       setRefreshing(false);
     }
