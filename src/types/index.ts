@@ -21,7 +21,7 @@ export const LEAGUE_IDS = {
   181: 'Scottish League One',
 } as const;
 
-export const GOAL_THRESHOLD = 3; // "more than 3 goals" = 4+ total
+export const GOAL_THRESHOLD = 2; // "over 2.5 goals" = 3+ total
 
 export interface Week {
   id: number;

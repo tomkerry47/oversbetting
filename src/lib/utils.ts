@@ -103,7 +103,7 @@ export function formatSelectionsForCopy(
   }
 
   text += '\n━━━━━━━━━━━━━━━━━━━━━━━━';
-  text += '\n💰 Over 3.5 goals to win!';
+  text += '\n💰 Over 2.5 goals to win!';
 
   return text;
 }

@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Betting Overs ⚽',
-  description: 'Saturday 15:00 kick-off over 3.5 goals tracker',
+  description: 'Saturday 15:00 kick-off over 2.5 goals tracker',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

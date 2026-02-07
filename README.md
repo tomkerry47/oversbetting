@@ -1,6 +1,6 @@
 # Betting Overs
 
-A football betting tracker for Saturday 15:00 kick-offs. Four players make 2 fixture selections each week, tracking whether games go over 3.5 goals.
+A football betting tracker for Saturday 15:00 kick-offs. Four players make 2 fixture selections each week, tracking whether games go over 2.5 goals.
 
 ## Setup
 

@@ -116,7 +116,7 @@ export default function HomePage() {
             Sat {week ? formatDate(week.saturday_date) : '...'} • 15:00 KOs
           </p>
           <p className="text-emerald-400 text-xs">
-            {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 3.5 goals to win 💰
+            {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 2.5 goals to win 💰
           </p>
         </div>
       </div>
