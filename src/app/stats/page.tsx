@@ -71,25 +71,25 @@ export default function StatsPage() {
   )[0];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="card">
-        <h1 className="text-2xl font-bold text-white">📊 Player Stats</h1>
-        <p className="text-slate-400 mt-1">Performance across all weeks</p>
+        <h1 className="text-xl font-bold text-white">📊 Player Stats</h1>
+        <p className="text-slate-400 text-xs mt-1">Performance across all weeks</p>
       </div>
 
       {/* Leaderboard */}
       <div className="card">
-        <h2 className="text-lg font-semibold text-white mb-4">🏆 Leaderboard</h2>
-        <div className="space-y-4">
+        <h2 className="text-base font-semibold text-white mb-3">🏆 Leaderboard</h2>
+        <div className="space-y-3">
           {[...stats]
             .sort((a, b) => b.win_rate - a.win_rate || b.wins - a.wins)
             .map((stat, idx) => (
               <div
                 key={stat.player_name}
-                className={`p-4 rounded-lg border transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border transition-all cursor-pointer active:scale-[0.98] ${
                   selectedPlayer === stat.player_name
                     ? 'border-emerald-500 bg-emerald-900/20'
-                    : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                    : 'border-slate-700 bg-slate-800/50'
                 } ${idx === 0 ? 'ring-1 ring-amber-500/30' : ''}`}
                 onClick={() =>
                   setSelectedPlayer(
@@ -99,9 +99,9 @@ export default function StatsPage() {
                   )
                 }
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">
                       {idx === 0
                         ? '🥇'
                         : idx === 1
@@ -111,33 +111,32 @@ export default function StatsPage() {
                         : '4️⃣'}
                     </span>
                     <div>
-                      <h3 className="font-semibold text-white text-lg">
+                      <h3 className="font-semibold text-white text-sm">
                         {stat.player_name}
                       </h3>
-                      <p className="text-slate-400 text-sm">
-                        {stat.total_selections} picks •{' '}
+                      <p className="text-slate-400 text-[10px]">
+                        {stat.total_selections} picks
                         {stat.current_streak > 0
-                          ? `🔥 ${stat.current_streak} streak`
-                          : 'No streak'}
+                          ? ` • 🔥 ${stat.current_streak} streak`
+                          : ''}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-emerald-400">
+                    <div className="text-xl font-bold text-emerald-400">
                       {stat.win_rate}%
                     </div>
-                    <div className="text-slate-400 text-sm">win rate</div>
+                    <div className="text-slate-500 text-[10px]">win rate</div>
                   </div>
                 </div>
 
-                {/* Stats bars */}
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
-                    <div className="text-emerald-400 font-bold text-xl">
+                    <div className="text-emerald-400 font-bold text-base">
                       {stat.wins}
                     </div>
-                    <div className="text-slate-500 text-xs">Wins</div>
-                    <div className="mt-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="text-slate-500 text-[10px]">Wins</div>
+                    <div className="mt-0.5 h-1 bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-emerald-500 rounded-full"
                         style={{
@@ -147,11 +146,11 @@ export default function StatsPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-red-400 font-bold text-xl">
+                    <div className="text-red-400 font-bold text-base">
                       {stat.losses}
                     </div>
-                    <div className="text-slate-500 text-xs">Losses</div>
-                    <div className="mt-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="text-slate-500 text-[10px]">Losses</div>
+                    <div className="mt-0.5 h-1 bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-red-500 rounded-full"
                         style={{
@@ -164,16 +163,15 @@ export default function StatsPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-amber-400 font-bold text-xl">
+                    <div className="text-amber-400 font-bold text-base">
                       £{stat.outstanding_fines.toFixed(0)}
                     </div>
-                    <div className="text-slate-500 text-xs">Fines owed</div>
+                    <div className="text-slate-500 text-[10px]">Fines</div>
                   </div>
                 </div>
 
-                {/* Best streak */}
                 {stat.best_streak > 0 && (
-                  <div className="mt-2 text-xs text-slate-500">
+                  <div className="mt-1.5 text-[10px] text-slate-500">
                     Best streak: {stat.best_streak} 🔥
                   </div>
                 )}
@@ -185,36 +183,35 @@ export default function StatsPage() {
       {/* Weekly Breakdown */}
       {weeklyBreakdown.length > 0 && (
         <div className="card">
-          <h2 className="text-lg font-semibold text-white mb-4">
+          <h2 className="text-base font-semibold text-white mb-3">
             📅 Weekly Breakdown
           </h2>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {weeklyBreakdown.map((wb) => (
               <div
                 key={wb.week.id}
-                className="p-4 rounded-lg border border-slate-700 bg-slate-800/50"
+                className="p-3 rounded-xl border border-slate-700 bg-slate-800/50"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium text-white">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium text-white text-sm">
                     Week {wb.week.week_number}
                   </h3>
-                  <span className="text-slate-400 text-sm">
+                  <span className="text-slate-400 text-[10px]">
                     {new Date(wb.week.saturday_date).toLocaleDateString('en-GB', {
                       day: 'numeric',
                       month: 'short',
-                      year: 'numeric',
                     })}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {PLAYERS.map((player) => {
                     const pr = wb.player_results[player];
                     if (!pr) {
                       return (
                         <div
                           key={player}
-                          className="text-center p-2 rounded bg-slate-900/50 text-slate-500 text-sm"
+                          className="text-center p-1.5 rounded-lg bg-slate-900/50 text-slate-500 text-[10px]"
                         >
                           {player}: -
                         </div>
@@ -223,12 +220,12 @@ export default function StatsPage() {
                     return (
                       <div
                         key={player}
-                        className="text-center p-2 rounded bg-slate-900/50"
+                        className="text-center p-1.5 rounded-lg bg-slate-900/50"
                       >
-                        <div className="text-sm font-medium text-white">
+                        <div className="text-xs font-medium text-white">
                           {player}
                         </div>
-                        <div className="text-xs mt-1">
+                        <div className="text-[10px] mt-0.5">
                           <span className="text-emerald-400">{pr.wins}W</span>
                           {' '}
                           <span className="text-red-400">{pr.losses}L</span>

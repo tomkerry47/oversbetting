@@ -70,22 +70,22 @@ export default function ResultsChecker({ onResultsChecked, hasSelections }: Resu
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between">
+      <div className="space-y-3">
         <div>
-          <h3 className="text-lg font-semibold text-white">🔍 Check Results</h3>
+          <h3 className="text-base font-semibold text-white">🔍 Check Results</h3>
           {timeUntilCheck && (
-            <p className="text-amber-400 text-sm mt-1">⏰ {timeUntilCheck}</p>
+            <p className="text-amber-400 text-xs mt-1">⏰ {timeUntilCheck}</p>
           )}
           {canCheck && (
-            <p className="text-emerald-400 text-sm mt-1">
-              Results available! Hit the button to check.
+            <p className="text-emerald-400 text-xs mt-1">
+              Results available! Hit the button.
             </p>
           )}
         </div>
         <button
           onClick={handleCheck}
           disabled={!canCheck || checking}
-          className="btn-gold"
+          className="btn-gold w-full py-4 text-base"
         >
           {checking ? (
             <span className="flex items-center gap-2">
@@ -117,7 +117,7 @@ export default function ResultsChecker({ onResultsChecked, hasSelections }: Resu
         </button>
       </div>
       {error && (
-        <div className="mt-3 bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-sm">
+        <div className="mt-3 bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-xl text-xs">
           ❌ {error}
         </div>
       )}

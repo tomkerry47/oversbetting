@@ -96,32 +96,28 @@ export default function HomePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Week Header */}
       <div className="card">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-white">
               ⚽ Week {week?.week_number || '?'}
             </h1>
-            <p className="text-slate-400 mt-1">
-              Saturday {week ? formatDate(week.saturday_date) : '...'} • 15:00
-              Kick-offs
-            </p>
-            <p className="text-emerald-400 text-sm mt-1">
-              {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} available
-              • Over 3.5 goals to win 💰
-            </p>
-          </div>
-          <div className="flex gap-2">
             <button
               onClick={handleRefreshFixtures}
               disabled={refreshing}
-              className="btn-secondary text-sm"
+              className="btn-secondary !py-2 !px-3 text-xs"
             >
-              {refreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+              {refreshing ? '🔄' : '🔄 Refresh'}
             </button>
           </div>
+          <p className="text-slate-400 text-sm">
+            Sat {week ? formatDate(week.saturday_date) : '...'} • 15:00 KOs
+          </p>
+          <p className="text-emerald-400 text-xs">
+            {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 3.5 goals to win 💰
+          </p>
         </div>
       </div>
 

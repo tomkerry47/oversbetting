@@ -68,22 +68,22 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="card">
-        <h1 className="text-2xl font-bold text-white">📅 Week History</h1>
-        <p className="text-slate-400 mt-1">
+        <h1 className="text-xl font-bold text-white">📅 History</h1>
+        <p className="text-slate-400 text-xs mt-1">
           {weeks.length} completed week{weeks.length !== 1 ? 's' : ''}
         </p>
       </div>
 
       {weeks.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-slate-400 text-lg">
-            No completed weeks yet. Check back after your first Saturday! ⚽
+        <div className="card text-center py-10">
+          <p className="text-slate-400">
+            No completed weeks yet ⚽
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {weeks.map((week) => {
             const isExpanded = expandedWeek === week.id;
             const data = weekData[week.id];
@@ -91,17 +91,16 @@ export default function HistoryPage() {
             return (
               <div
                 key={week.id}
-                className="card cursor-pointer transition-all"
+                className="card cursor-pointer transition-all active:scale-[0.98]"
                 onClick={() => loadWeekDetails(week.id)}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className="text-base font-semibold text-white">
                       Week {week.week_number}
                     </h3>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-slate-400 text-xs">
                       {new Date(week.saturday_date).toLocaleDateString('en-GB', {
-                        weekday: 'long',
                         day: 'numeric',
                         month: 'long',
                         year: 'numeric',
@@ -118,7 +117,7 @@ export default function HistoryPage() {
                 </div>
 
                 {isExpanded && data && (
-                  <div className="mt-4 pt-4 border-t border-slate-700 space-y-4">
+                  <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
                     {PLAYERS.map((player) => {
                       const playerSelections = data.selections.filter(
                         (s) => s.player_name === player
@@ -132,31 +131,26 @@ export default function HistoryPage() {
                       return (
                         <div
                           key={player}
-                          className="p-3 rounded-lg bg-slate-900/50"
+                          className="p-2.5 rounded-xl bg-slate-900/50"
                         >
-                          <h4 className="font-medium text-emerald-400 mb-2">
+                          <h4 className="font-medium text-emerald-400 mb-1.5 text-sm">
                             {player}
                           </h4>
                           <div className="space-y-1">
                             {playerSelections.map((sel) => (
                               <div
                                 key={sel.id}
-                                className="flex items-center justify-between text-sm"
+                                className="flex items-center justify-between text-xs"
                               >
-                                <span className="text-slate-300">
+                                <span className="text-slate-300 truncate mr-2">
                                   {getResultEmoji(sel.result)}{' '}
                                   {sel.fixture?.home_team} vs{' '}
                                   {sel.fixture?.away_team}
                                 </span>
-                                <span className="text-slate-400">
+                                <span className="text-slate-400 flex-shrink-0">
                                   {sel.fixture?.home_score !== null
                                     ? `${sel.fixture?.home_score}-${sel.fixture?.away_score}`
                                     : '-'}
-                                  {sel.total_goals !== null && (
-                                    <span className="ml-1 text-xs">
-                                      ({sel.total_goals} goals)
-                                    </span>
-                                  )}
                                 </span>
                               </div>
                             ))}

@@ -8,6 +8,11 @@
   --background-end-rgb: 30, 41, 59;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -16,58 +21,71 @@ body {
       rgb(var(--background-end-rgb))
     );
   min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Safe area for iOS notch / home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 @layer utilities {
   .card {
-    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-xl p-6 shadow-lg;
+    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-xl p-4 shadow-lg;
   }
 
   .card-compact {
-    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-4 shadow-md;
+    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-3 shadow-md;
   }
 
   .btn-primary {
-    @apply bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-4
-      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
-      shadow-md hover:shadow-emerald-500/25;
+    @apply bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold 
+      py-3 px-5 rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      shadow-md active:scale-[0.97] text-sm;
   }
 
   .btn-secondary {
-    @apply bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2 px-4
-      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-slate-600 hover:bg-slate-500 active:bg-slate-700 text-white font-semibold 
+      py-3 px-5 rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      active:scale-[0.97] text-sm;
   }
 
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-500 text-white font-semibold py-2 px-4
-      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold 
+      py-3 px-5 rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      active:scale-[0.97] text-sm;
   }
 
   .btn-gold {
-    @apply bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 px-4
-      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-semibold 
+      py-3 px-5 rounded-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+      active:scale-[0.97] text-sm;
   }
 
   .badge-won {
-    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[11px] font-semibold;
   }
 
   .badge-lost {
-    @apply bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-[11px] font-semibold;
   }
 
   .badge-pending {
-    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[11px] font-semibold;
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - thin on mobile */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgb(30, 41, 59);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -75,17 +93,12 @@ body {
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(100, 116, 139);
-}
-
-/* Animate selection */
+/* Touch-friendly fixture cards */
 .fixture-selectable {
-  @apply transition-all duration-200 cursor-pointer;
-}
-
-.fixture-selectable:hover {
-  @apply scale-[1.02] shadow-lg;
+  @apply transition-all duration-150 cursor-pointer active:scale-[0.98];
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .fixture-selected {

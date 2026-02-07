@@ -8,6 +8,17 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Betting Overs ⚽',
   description: 'Saturday 15:00 kick-off over 3.5 goals tracker',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    viewportFit: 'cover',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Betting Overs',
+  },
 };
 
 export default function RootLayout({
@@ -19,7 +30,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Navigation />
-        <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
+        <main className="max-w-lg mx-auto px-3 py-4 pb-24">{children}</main>
       </body>
     </html>
   );

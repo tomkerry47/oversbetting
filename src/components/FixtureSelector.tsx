@@ -90,11 +90,11 @@ export default function FixtureSelector({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Player Selection */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-white mb-3">Who's picking?</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <h3 className="text-base font-semibold text-white mb-3">Who&apos;s picking?</h3>
+        <div className="grid grid-cols-2 gap-2">
           {PLAYERS.map((player) => {
             const hasSelected = playerHasSelected(player);
             const isActive = selectedPlayer === player;
@@ -107,15 +107,15 @@ export default function FixtureSelector({
                   setSelectedFixtures([]);
                   setError(null);
                 }}
-                className={`p-3 rounded-lg border-2 transition-all font-semibold text-center ${
+                className={`py-4 px-3 rounded-xl border-2 transition-all font-semibold text-center active:scale-[0.97] ${
                   isActive
                     ? 'border-emerald-500 bg-emerald-900/40 text-emerald-400'
                     : hasSelected
                     ? 'border-slate-600 bg-slate-700/50 text-slate-300'
-                    : 'border-slate-600 bg-slate-800 text-white hover:border-emerald-500/50'
+                    : 'border-slate-600 bg-slate-800 text-white'
                 }`}
               >
-                <div>{player}</div>
+                <div className="text-base">{player}</div>
                 {hasSelected && (
                   <div className="text-xs text-emerald-400 mt-1">✅ Picked</div>
                 )}
@@ -128,27 +128,27 @@ export default function FixtureSelector({
       {/* Fixture Selection */}
       {selectedPlayer && (
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold text-white">
               {selectedPlayer}&apos;s Picks
-              <span className="text-sm text-slate-400 ml-2">
+              <span className="text-xs text-slate-400 ml-1">
                 ({selectedFixtures.length}/{MAX_SELECTIONS_PER_PLAYER})
               </span>
             </h3>
             {playerHasSelected(selectedPlayer) && (
-              <span className="text-xs text-amber-400">
-                ⚠️ Will replace existing picks
+              <span className="text-[10px] text-amber-400">
+                ⚠️ Replaces picks
               </span>
             )}
           </div>
 
           {Object.entries(groupedFixtures).map(([league, leagueFixtures]) => (
-            <div key={league} className="mb-4">
-              <h4 className="text-sm font-medium text-emerald-400 mb-2 flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+            <div key={league} className="mb-3">
+              <h4 className="text-xs font-medium text-emerald-400 mb-2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
                 {league}
               </h4>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {leagueFixtures.map((fixture) => {
                   const isSelected = selectedFixtures.includes(fixture.id);
                   const isFull =
@@ -160,39 +160,36 @@ export default function FixtureSelector({
                       key={fixture.id}
                       onClick={() => handleFixtureToggle(fixture.id)}
                       disabled={isFull}
-                      className={`w-full text-left p-3 rounded-lg border transition-all
+                      className={`w-full text-left p-3 rounded-xl border transition-all
                         fixture-selectable
                         ${
                           isSelected
                             ? 'fixture-selected border-emerald-500'
                             : isFull
-                            ? 'border-slate-700 bg-slate-800/50 opacity-50 cursor-not-allowed'
-                            : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'
+                            ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
+                            : 'border-slate-700 bg-slate-800/50'
                         }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
                             ${
                               isSelected
                                 ? 'border-emerald-500 bg-emerald-500 text-white'
                                 : 'border-slate-500'
                             }`}
-                          >
-                            {isSelected && '✓'}
+                        >
+                          {isSelected && '✓'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white truncate">
+                            {fixture.home_team}
                           </div>
-                          <div>
-                            <span className="font-medium text-white">
-                              {fixture.home_team}
-                            </span>
-                            <span className="text-slate-400 mx-2">vs</span>
-                            <span className="font-medium text-white">
-                              {fixture.away_team}
-                            </span>
+                          <div className="text-sm font-medium text-white truncate">
+                            <span className="text-slate-500 text-xs mr-1">vs</span>
+                            {fixture.away_team}
                           </div>
                         </div>
-                        <span className="text-xs text-slate-500">15:00</span>
                       </div>
                     </button>
                   );
@@ -212,39 +209,33 @@ export default function FixtureSelector({
       {/* Submit */}
       {selectedPlayer && selectedFixtures.length > 0 && (
         <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-medium">
-                {selectedFixtures.length}/{MAX_SELECTIONS_PER_PLAYER} fixtures selected
-              </p>
-              <p className="text-slate-400 text-sm">
-                {selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER
-                  ? 'Ready to submit!'
-                  : `Pick ${MAX_SELECTIONS_PER_PLAYER - selectedFixtures.length} more`}
-              </p>
-            </div>
-            <button
-              onClick={handleSubmit}
-              disabled={
-                submitting ||
-                selectedFixtures.length !== MAX_SELECTIONS_PER_PLAYER
-              }
-              className="btn-primary"
-            >
-              {submitting ? 'Submitting...' : `Submit ${selectedPlayer}'s Picks`}
-            </button>
-          </div>
+          <p className="text-white font-medium text-sm text-center mb-1">
+            {selectedFixtures.length}/{MAX_SELECTIONS_PER_PLAYER} selected
+            {selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER
+              ? ' — Ready! ✅'
+              : ` — Pick ${MAX_SELECTIONS_PER_PLAYER - selectedFixtures.length} more`}
+          </p>
+          <button
+            onClick={handleSubmit}
+            disabled={
+              submitting ||
+              selectedFixtures.length !== MAX_SELECTIONS_PER_PLAYER
+            }
+            className="btn-primary w-full text-base py-4"
+          >
+            {submitting ? 'Submitting...' : `Submit ${selectedPlayer}'s Picks`}
+          </button>
         </div>
       )}
 
       {/* Messages */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg">
+        <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-xl text-sm">
           ❌ {error}
         </div>
       )}
       {success && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-lg">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-sm">
           {success}
         </div>
       )}

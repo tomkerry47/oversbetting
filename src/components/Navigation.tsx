@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/', label: '⚽ Picks', icon: '🏟️' },
+  { href: '/', label: 'Picks', icon: '🏟️' },
   { href: '/stats', label: 'Stats', icon: '📊' },
   { href: '/fines', label: 'Fines', icon: '💰' },
   { href: '/history', label: 'History', icon: '📅' },
@@ -14,34 +14,44 @@ export default function Navigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-slate-900/90 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+    <>
+      {/* Top bar - slim on mobile */}
+      <header className="bg-slate-900/90 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-center">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">⚽</span>
-            <span className="text-lg font-bold text-emerald-400 hidden sm:block">
+            <span className="text-xl">⚽</span>
+            <span className="text-base font-bold text-emerald-400">
               Betting Overs
             </span>
           </Link>
+        </div>
+      </header>
 
-          <div className="flex gap-1">
-            {NAV_ITEMS.map((item) => (
+      {/* Bottom tab bar - mobile native feel */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-700 z-50">
+        <div className="grid grid-cols-4 max-w-lg mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href;
+            return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === item.href
-                    ? 'bg-emerald-600/20 text-emerald-400'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                className={`relative flex flex-col items-center justify-center h-16 gap-0.5 transition-colors active:scale-95 ${
+                  isActive
+                    ? 'text-emerald-400'
+                    : 'text-slate-500 active:text-slate-300'
                 }`}
               >
-                <span className="sm:hidden">{item.icon}</span>
-                <span className="hidden sm:inline">{item.label}</span>
+                {isActive && (
+                  <span className="absolute top-0 w-8 h-0.5 bg-emerald-400 rounded-full" />
+                )}
+                <span className="text-xl leading-none">{item.icon}</span>
+                <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      </div>
-    </nav>
+      </nav>
+    </>
   );
 }

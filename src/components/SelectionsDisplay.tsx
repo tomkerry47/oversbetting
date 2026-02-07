@@ -52,14 +52,14 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">📋 This Week&apos;s Picks</h3>
-        <button onClick={handleCopy} className="btn-secondary text-sm">
-          {copied ? '✅ Copied!' : '📋 Copy All'}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold text-white">📋 This Week&apos;s Picks</h3>
+        <button onClick={handleCopy} className="btn-secondary !py-2 !px-3 text-xs">
+          {copied ? '✅ Copied!' : '📋 Copy'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="space-y-2">
         {PLAYERS.map((player) => {
           const playerPicks = grouped[player];
           if (!playerPicks || playerPicks.length === 0) {
@@ -73,29 +73,34 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
 
           return (
             <div key={player} className="card-compact bg-slate-900/50">
-              <h4 className="font-semibold text-emerald-400 mb-3">{player}</h4>
-              <div className="space-y-2">
+              <h4 className="font-semibold text-emerald-400 mb-2 text-sm">{player}</h4>
+              <div className="space-y-1.5">
                 {playerPicks.map((sel) => (
                   <div
                     key={sel.id}
-                    className="flex items-center justify-between bg-slate-800/50 rounded-lg p-2"
+                    className="bg-slate-800/50 rounded-lg p-2.5"
                   >
-                    <div className="text-sm">
-                      <span className="text-white font-medium">
-                        {sel.fixture?.home_team}
-                      </span>
-                      <span className="text-slate-400 mx-1">vs</span>
-                      <span className="text-white font-medium">
-                        {sel.fixture?.away_team}
-                      </span>
-                      {sel.fixture?.home_score !== null &&
-                        sel.fixture?.away_score !== null && (
-                          <span className="text-amber-400 ml-2 font-bold">
-                            ({sel.fixture?.home_score}-{sel.fixture?.away_score})
-                          </span>
-                        )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-xs min-w-0 flex-1">
+                        <div className="text-white font-medium truncate">
+                          {sel.fixture?.home_team}
+                        </div>
+                        <div className="text-white font-medium truncate">
+                          <span className="text-slate-500 mr-1">vs</span>
+                          {sel.fixture?.away_team}
+                        </div>
+                        {sel.fixture?.home_score !== null &&
+                          sel.fixture?.away_score !== null && (
+                            <div className="text-amber-400 font-bold mt-0.5">
+                              {sel.fixture?.home_score}-{sel.fixture?.away_score}
+                              {sel.total_goals !== null && (
+                                <span className="text-slate-400 font-normal ml-1">({sel.total_goals} goals)</span>
+                              )}
+                            </div>
+                          )}
+                      </div>
+                      <div className="flex-shrink-0 mt-0.5">{getResultBadge(sel.result)}</div>
                     </div>
-                    <div>{getResultBadge(sel.result)}</div>
                   </div>
                 ))}
               </div>
