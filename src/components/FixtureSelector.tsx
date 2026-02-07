@@ -22,11 +22,48 @@ export default function FixtureSelector({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Group fixtures by league
   const groupedFixtures = fixtures.reduce<Record<string, Fixture[]>>((acc, f) => {
     if (!acc[f.league_name]) acc[f.league_name] = [];
     acc[f.league_name].push(f);
     return acc;
   }, {});
+
+  // Initialize collapsed state with all leagues collapsed by default
+  const [collapsedLeagues, setCollapsedLeagues] = useState<Record<string, boolean>>(() => {
+    const initialState: Record<string, boolean> = {};
+    Object.keys(groupedFixtures).forEach(league => {
+      initialState[league] = true;
+    });
+    return initialState;
+  });
+
+  // Define league order (by league ID mapping)
+  const leagueOrder: Record<string, number> = {
+    'Premier League': 1,
+    'Championship': 2,
+    'League One': 3,
+    'League Two': 4,
+    'National League': 5,
+    'Scottish Premiership': 6,
+    'Scottish Championship': 7,
+    'Scottish League Two': 8,
+    'Scottish League One': 9,
+  };
+
+  // Sort leagues by defined order
+  const sortedLeagues = Object.entries(groupedFixtures).sort(([leagueA], [leagueB]) => {
+    const orderA = leagueOrder[leagueA] ?? 999;
+    const orderB = leagueOrder[leagueB] ?? 999;
+    return orderA - orderB;
+  });
+
+  const toggleLeague = (league: string) => {
+    setCollapsedLeagues(prev => ({
+      ...prev,
+      [league]: !prev[league]
+    }));
+  };
 
   const handleFixtureToggle = (fixtureId: number) => {
     setSelectedFixtures((prev) => {
@@ -142,61 +179,73 @@ export default function FixtureSelector({
             )}
           </div>
 
-          {Object.entries(groupedFixtures).map(([league, leagueFixtures]) => (
-            <div key={league} className="mb-3">
-              <h4 className="text-xs font-medium text-emerald-400 mb-2 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
-                {league}
-              </h4>
-              <div className="space-y-1.5">
-                {leagueFixtures.map((fixture) => {
-                  const isSelected = selectedFixtures.includes(fixture.id);
-                  const isFull =
-                    selectedFixtures.length >= MAX_SELECTIONS_PER_PLAYER &&
-                    !isSelected;
+          {sortedLeagues.map(([league, leagueFixtures]) => {
+            const isCollapsed = collapsedLeagues[league];
+            
+            return (
+              <div key={league} className="mb-3">
+                <button
+                  onClick={() => toggleLeague(league)}
+                  className="w-full text-left"
+                >
+                  <h4 className="text-xs font-medium text-emerald-400 mb-2 flex items-center gap-1.5">
+                    <span className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
+                    {league} ({leagueFixtures.length})
+                  </h4>
+                </button>
+                
+                {!isCollapsed && (
+                  <div className="space-y-1.5">{leagueFixtures.map((fixture) => {
+                      const isSelected = selectedFixtures.includes(fixture.id);
+                      const isFull =
+                        selectedFixtures.length >= MAX_SELECTIONS_PER_PLAYER &&
+                        !isSelected;
 
-                  return (
-                    <button
-                      key={fixture.id}
-                      onClick={() => handleFixtureToggle(fixture.id)}
-                      disabled={isFull}
-                      className={`w-full text-left p-3 rounded-xl border transition-all
-                        fixture-selectable
-                        ${
-                          isSelected
-                            ? 'fixture-selected border-emerald-500'
-                            : isFull
-                            ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
-                            : 'border-slate-700 bg-slate-800/50'
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
+                      return (
+                        <button
+                          key={fixture.id}
+                          onClick={() => handleFixtureToggle(fixture.id)}
+                          disabled={isFull}
+                          className={`w-full text-left p-3 rounded-xl border transition-all
+                            fixture-selectable
                             ${
                               isSelected
-                                ? 'border-emerald-500 bg-emerald-500 text-white'
-                                : 'border-slate-500'
+                                ? 'fixture-selected border-emerald-500'
+                                : isFull
+                                ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
+                                : 'border-slate-700 bg-slate-800/50'
                             }`}
                         >
-                          {isSelected && '✓'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-white truncate">
-                            {fixture.home_team}
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
+                                ${
+                                  isSelected
+                                    ? 'border-emerald-500 bg-emerald-500 text-white'
+                                    : 'border-slate-500'
+                                }`}
+                            >
+                              {isSelected && '✓'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-white truncate">
+                                {fixture.home_team}
+                              </div>
+                              <div className="text-sm font-medium text-white truncate">
+                                <span className="text-slate-500 text-xs mr-1">vs</span>
+                                {fixture.away_team}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm font-medium text-white truncate">
-                            <span className="text-slate-500 text-xs mr-1">vs</span>
-                            {fixture.away_team}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {fixtures.length === 0 && (
             <p className="text-slate-400 text-center py-8">
@@ -208,11 +257,19 @@ export default function FixtureSelector({
 
       {/* Submit */}
       {selectedPlayer && selectedFixtures.length > 0 && (
-        <div className="card">
-          <p className="text-white font-medium text-sm text-center mb-1">
+        <div className={`card sticky bottom-20 z-10 transition-all ${
+          selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER 
+            ? 'bg-gradient-to-r from-emerald-900 to-emerald-800 border-2 border-emerald-500 shadow-lg shadow-emerald-500/50' 
+            : ''
+        }`}>
+          <p className={`font-medium text-sm text-center mb-1 ${
+            selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER 
+              ? 'text-emerald-100 text-base' 
+              : 'text-white'
+          }`}>
             {selectedFixtures.length}/{MAX_SELECTIONS_PER_PLAYER} selected
             {selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER
-              ? ' — Ready! ✅'
+              ? ' — Ready to submit! ✅'
               : ` — Pick ${MAX_SELECTIONS_PER_PLAYER - selectedFixtures.length} more`}
           </p>
           <button
@@ -221,9 +278,13 @@ export default function FixtureSelector({
               submitting ||
               selectedFixtures.length !== MAX_SELECTIONS_PER_PLAYER
             }
-            className="btn-primary w-full text-base py-4"
+            className={`w-full text-base py-4 rounded-xl font-bold transition-all ${
+              selectedFixtures.length === MAX_SELECTIONS_PER_PLAYER
+                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg animate-pulse'
+                : 'btn-primary'
+            }`}
           >
-            {submitting ? 'Submitting...' : `Submit ${selectedPlayer}'s Picks`}
+            {submitting ? 'Submitting...' : `Submit ${selectedPlayer}'s Picks 🎯`}
           </button>
         </div>
       )}

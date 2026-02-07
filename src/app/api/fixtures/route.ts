@@ -20,17 +20,25 @@ export async function GET(request: NextRequest) {
       .eq('saturday_date', saturdayDate)
       .single();
 
+    if (weekError && weekError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned, which is fine
+      return NextResponse.json({ error: weekError.message }, { status: 500 });
+    }
+
     if (!week) {
       const season = getCurrentSeason();
       const weekNumber = calculateWeekNumber(saturdayDate);
 
       const { data: newWeek, error: createError } = await supabase
         .from('weeks')
-        .insert({
+        .upsert({
           week_number: weekNumber,
           season: season,
           saturday_date: saturdayDate,
           status: 'active',
+        }, {
+          onConflict: 'saturday_date',
+          ignoreDuplicates: false
         })
         .select()
         .single();

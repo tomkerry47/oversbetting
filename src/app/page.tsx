@@ -15,9 +15,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState('Loading fixtures...');
 
   const fetchData = useCallback(async () => {
     try {
+      setLoadingMessage('Fetching fixtures from SofaScore...');
       // Fetch fixtures (will create week if needed)
       const fixturesRes = await fetch('/api/fixtures');
       const fixturesData = await fixturesRes.json();
@@ -27,6 +29,9 @@ export default function HomePage() {
         return;
       }
 
+      const fixtureCount = fixturesData.fixtures?.length || 0;
+      setLoadingMessage(`Found ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''} at 15:00`);
+      
       setWeek(fixturesData.week);
       setFixtures(fixturesData.fixtures || []);
 
@@ -37,6 +42,7 @@ export default function HomePage() {
         );
         const selectionsData = await selectionsRes.json();
         setSelections(selectionsData.selections || []);
+        setLoadingMessage(''); // Clear loading message after selections loaded
       }
     } catch (err) {
       setError('Failed to load data. Check your connection.');
@@ -52,18 +58,35 @@ export default function HomePage() {
   const handleRefreshFixtures = async () => {
     setRefreshing(true);
     setError(null);
+    setLoadingMessage('Refreshing fixtures from API...');
     try {
       const res = await fetch('/api/fixtures', { method: 'POST' });
       const data = await res.json();
       
       if (!res.ok) {
         setError(data.error || 'Failed to refresh fixtures');
+        setLoadingMessage('');
         return;
       }
       
-      await fetchData();
+      const fixtureCount = data.fixtures?.length || 0;
+      setLoadingMessage(`Refreshed ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
+      
+      setWeek(data.week);
+      setFixtures(data.fixtures || []);
+      
+      // Refresh selections
+      if (data.week) {
+        const selectionsRes = await fetch(`/api/selections?week_id=${data.week.id}`);
+        const selectionsData = await selectionsRes.json();
+        setSelections(selectionsData.selections || []);
+      }
+      
+      // Clear message after 2 seconds
+      setTimeout(() => setLoadingMessage(''), 2000);
     } catch (err) {
       setError('Network error, please try again');
+      setLoadingMessage('');
     } finally {
       setRefreshing(false);
     }
@@ -88,7 +111,7 @@ export default function HomePage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-bounce">⚽</div>
-          <p className="text-slate-400">Loading fixtures...</p>
+          <p className="text-slate-400">{loadingMessage}</p>
         </div>
       </div>
     );
@@ -128,6 +151,11 @@ export default function HomePage() {
           <p className="text-emerald-400 text-xs">
             {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 2.5 goals to win 💰
           </p>
+          {loadingMessage && (
+            <p className="text-blue-400 text-xs animate-pulse">
+              {loadingMessage}
+            </p>
+          )}
         </div>
       </div>
 

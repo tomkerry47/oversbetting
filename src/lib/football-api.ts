@@ -1,33 +1,42 @@
-import { LEAGUE_IDS, APIFixture } from '@/types';
+import { APIFixture } from '@/types';
 
-const API_BASE = 'https://v3.football.api-sports.io';
-const API_KEY = process.env.FOOTBALL_API_KEY!;
+// Using SofaScore unofficial API (free, no key needed)
+const API_BASE = 'https://api.sofascore.com/api/v1';
 
-async function apiRequest(endpoint: string, params: Record<string, string>) {
-  const url = new URL(`${API_BASE}${endpoint}`);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+// SofaScore tournament IDs for our leagues
+const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
+  '17': { id: 17, name: 'Premier League' },
+  '18': { id: 18, name: 'Championship' },
+  '24': { id: 24, name: 'League One' },
+  '25': { id: 25, name: 'League Two' },
+  '173': { id: 173, name: 'National League' },
+  '36': { id: 36, name: 'Scottish Premiership' },
+  '206': { id: 206, name: 'Scottish Championship' },
+  '207': { id: 207, name: 'Scottish League One' },
+  '209': { id: 209, name: 'Scottish League Two' },
+};
 
-  console.log(`API request: ${url.toString()}`);
+async function apiRequest(endpoint: string) {
+  const url = `${API_BASE}${endpoint}`;
+  console.log(`SofaScore API request: ${url}`);
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     headers: {
-      'x-apisports-key': API_KEY,
+      'Accept': 'application/json',
     },
-    next: { revalidate: 300 }, // cache for 5 min
+    cache: 'no-store', // Disable caching - responses are too large (3MB+)
   });
 
   if (!res.ok) {
     const errorBody = await res.text();
-    console.error(`Football API error: ${res.status} ${res.statusText}`, errorBody);
-    throw new Error(`Football API error: ${res.status} ${res.statusText}`);
+    console.error(`SofaScore API error: ${res.status} ${res.statusText}`, errorBody);
+    throw new Error(`SofaScore API error: ${res.status} ${res.statusText}`);
   }
 
   const data = await res.json();
-  console.log(`API response:`, { 
-    endpoint, 
-    params, 
-    responseCount: data.response?.length || 0,
-    errors: data.errors 
+  console.log(`SofaScore API response:`, { 
+    endpoint,
+    eventCount: data.events?.length || 0
   });
   
   return data;
@@ -37,57 +46,91 @@ async function apiRequest(endpoint: string, params: Record<string, string>) {
  * Fetch Saturday 15:00 BST/GMT kick-offs for all tracked leagues on a given date.
  */
 export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]> {
-  const leagueIds = Object.keys(LEAGUE_IDS);
   const allFixtures: APIFixture[] = [];
+  
+  console.log(`Fetching fixtures for ${date}`);
 
-  // Fetch fixtures for each league (API allows one league per request)
-  const requests = leagueIds.map(async (leagueId) => {
-    try {
-      const data = await apiRequest('/fixtures', {
-        league: leagueId,
-        date: date,
-        timezone: 'Europe/London',
-      });
-      return (data.response || []) as APIFixture[];
-    } catch (err) {
-      console.error(`Error fetching league ${leagueId}:`, err);
-      return [] as APIFixture[];
-    }
-  });
+  try {
+    // Fetch all fixtures for the date (single API call)
+    const data = await apiRequest(`/sport/football/scheduled-events/${date}`);
+    const events = data.events || [];
+    
+    console.log(`Total events from API: ${events.length}`);
 
-  const results = await Promise.all(requests);
+    // Filter for our target leagues
+    const targetLeagueIds = Object.keys(SOFASCORE_TOURNAMENTS).map(Number);
+    
+    for (const event of events) {
+      const leagueId = event.tournament?.uniqueTournament?.id;
+      
+      // Check if this is one of our target leagues
+      if (!targetLeagueIds.includes(leagueId)) {
+        continue;
+      }
 
-  console.log(`Processing ${results.flat().length} total fixtures from API`);
-
-  for (const fixtures of results) {
-    // Filter for 15:00 kick-offs (UK time)
-    const filtered = fixtures.filter((f: APIFixture) => {
-      const kickOff = new Date(f.fixture.date);
-      // Convert to UK time string and check hour
+      const kickOff = new Date(event.startTimestamp * 1000);
       const ukTime = kickOff.toLocaleTimeString('en-GB', {
         timeZone: 'Europe/London',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
       });
-      const is3pm = ukTime === '15:00';
-      
-      if (fixtures.length > 0 && !is3pm) {
-        console.log(`Skipping ${f.teams.home.name} vs ${f.teams.away.name} - kick-off: ${ukTime}`);
-      }
-      
-      return is3pm;
-    });
-    
-    if (filtered.length > 0) {
-      console.log(`Found ${filtered.length} 15:00 kick-offs from this league`);
-    }
-    
-    allFixtures.push(...filtered);
-  }
 
-  console.log(`Total 15:00 fixtures for ${date}: ${allFixtures.length}`);
-  return allFixtures;
+      // Only include 15:00 kick-offs
+      if (ukTime !== '15:00') {
+        continue;
+      }
+
+      const leagueName = SOFASCORE_TOURNAMENTS[String(leagueId)]?.name || event.tournament?.uniqueTournament?.name || 'Unknown';
+
+      allFixtures.push({
+        fixture: {
+          id: event.id,
+          date: kickOff.toISOString(),
+          status: {
+            short: event.status?.type === 'finished' ? 'FT' : 
+                   event.status?.type === 'inprogress' ? 'LIVE' : 'NS',
+            long: event.status?.type === 'finished' ? 'Match Finished' : 
+                  event.status?.type === 'inprogress' ? 'In Progress' : 'Not Started',
+          },
+        },
+        league: {
+          id: leagueId,
+          name: leagueName,
+        },
+        teams: {
+          home: {
+            id: event.homeTeam?.id || 0,
+            name: event.homeTeam?.name || '',
+            logo: `https://api.sofascore.com/api/v1/team/${event.homeTeam?.id}/image`,
+          },
+          away: {
+            id: event.awayTeam?.id || 0,
+            name: event.awayTeam?.name || '',
+            logo: `https://api.sofascore.com/api/v1/team/${event.awayTeam?.id}/image`,
+          },
+        },
+        goals: {
+          home: event.homeScore?.current ?? null,
+          away: event.awayScore?.current ?? null,
+        },
+      });
+    }
+
+    console.log(`Total 15:00 fixtures for ${date}: ${allFixtures.length}`);
+    
+    // Log league breakdown
+    const leagueCounts = allFixtures.reduce((acc, f) => {
+      acc[f.league.name] = (acc[f.league.name] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log('League breakdown:', leagueCounts);
+
+    return allFixtures;
+  } catch (err) {
+    console.error('Error fetching Saturday fixtures:', err);
+    return [];
+  }
 }
 
 /**
@@ -95,13 +138,58 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
  */
 export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixture[]> {
   if (fixtureIds.length === 0) return [];
-
-  const idsParam = fixtureIds.join('-');
-  const data = await apiRequest('/fixtures', {
-    ids: idsParam,
-  });
-
-  return (data.response || []) as APIFixture[];
+  
+  const allFixtures: APIFixture[] = [];
+  
+  // Fetch each event individually
+  for (const fixtureId of fixtureIds) {
+    try {
+      const data = await apiRequest(`/event/${fixtureId}`);
+      const event = data.event;
+      
+      if (event) {
+        const tournament = event.tournament?.uniqueTournament;
+        const leagueName = SOFASCORE_TOURNAMENTS[String(tournament?.id)]?.name || tournament?.name || 'Unknown';
+        
+        allFixtures.push({
+          fixture: {
+            id: event.id,
+            date: new Date(event.startTimestamp * 1000).toISOString(),
+            status: {
+              short: event.status?.type === 'finished' ? 'FT' : 
+                     event.status?.type === 'inprogress' ? 'LIVE' : 'NS',
+              long: event.status?.type === 'finished' ? 'Match Finished' : 
+                    event.status?.type === 'inprogress' ? 'In Progress' : 'Not Started',
+            },
+          },
+          league: {
+            id: tournament?.id || 0,
+            name: leagueName,
+          },
+          teams: {
+            home: {
+              id: event.homeTeam?.id || 0,
+              name: event.homeTeam?.name || '',
+              logo: `https://api.sofascore.com/api/v1/team/${event.homeTeam?.id}/image`,
+            },
+            away: {
+              id: event.awayTeam?.id || 0,
+              name: event.awayTeam?.name || '',
+              logo: `https://api.sofascore.com/api/v1/team/${event.awayTeam?.id}/image`,
+            },
+          },
+          goals: {
+            home: event.homeScore?.current ?? null,
+            away: event.awayScore?.current ?? null,
+          },
+        });
+      }
+    } catch (err) {
+      console.error(`Error fetching fixture ${fixtureId}:`, err);
+    }
+  }
+  
+  return allFixtures;
 }
 
 /**
@@ -113,7 +201,7 @@ export function getCurrentSeason(): string {
   const month = now.getMonth() + 1;
   // Football season starts in August
   if (month >= 8) {
-    return `${year}-${(year + 1).toString().slice(-2)}`;
+    return `${year}-${String(year + 1).slice(-2)}`;
   }
-  return `${year - 1}-${year.toString().slice(-2)}`;
+  return `${year - 1}-${String(year).slice(-2)}`;
 }

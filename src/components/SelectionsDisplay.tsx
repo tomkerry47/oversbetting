@@ -42,11 +42,11 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
   const getResultBadge = (result: string) => {
     switch (result) {
       case 'won':
-        return <span className="badge-won">✅ WON</span>;
+        return <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700">✅ WON</span>;
       case 'lost':
-        return <span className="badge-lost">❌ LOST</span>;
+        return <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700">❌ LOST</span>;
       default:
-        return <span className="badge-pending">⏳ Pending</span>;
+        return <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-300 border border-slate-600">⏳ Pending</span>;
     }
   };
 
@@ -59,48 +59,46 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
         </button>
       </div>
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
         {PLAYERS.map((player) => {
           const playerPicks = grouped[player];
           if (!playerPicks || playerPicks.length === 0) {
             return (
               <div key={player} className="card-compact bg-slate-900/50">
-                <h4 className="font-semibold text-slate-400 mb-2">{player}</h4>
-                <p className="text-slate-500 text-sm italic">No picks yet</p>
+                <h4 className="font-semibold text-slate-400 mb-1.5 text-xs">{player}</h4>
+                <p className="text-slate-500 text-[10px] italic">No picks</p>
               </div>
             );
           }
 
           return (
             <div key={player} className="card-compact bg-slate-900/50">
-              <h4 className="font-semibold text-emerald-400 mb-2 text-sm">{player}</h4>
-              <div className="space-y-1.5">
+              <h4 className="font-semibold text-emerald-400 mb-1.5 text-xs">{player}</h4>
+              <div className="space-y-1">
                 {playerPicks.map((sel) => (
                   <div
                     key={sel.id}
-                    className="bg-slate-800/50 rounded-lg p-2.5"
+                    className="bg-slate-800/50 rounded-lg p-1.5 flex items-start justify-between gap-1.5"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-xs min-w-0 flex-1">
-                        <div className="text-white font-medium truncate">
-                          {sel.fixture?.home_team}
-                        </div>
-                        <div className="text-white font-medium truncate">
-                          <span className="text-slate-500 mr-1">vs</span>
-                          {sel.fixture?.away_team}
-                        </div>
-                        {sel.fixture?.home_score !== null &&
-                          sel.fixture?.away_score !== null && (
-                            <div className="text-amber-400 font-bold mt-0.5">
-                              {sel.fixture?.home_score}-{sel.fixture?.away_score}
-                              {sel.total_goals !== null && (
-                                <span className="text-slate-400 font-normal ml-1">({sel.total_goals} goals)</span>
-                              )}
-                            </div>
-                          )}
+                    <div className="text-[10px] min-w-0 flex-1">
+                      <div className="text-white font-medium truncate leading-tight">
+                        {sel.fixture?.home_team}
                       </div>
-                      <div className="flex-shrink-0 mt-0.5">{getResultBadge(sel.result)}</div>
+                      <div className="text-white font-medium truncate leading-tight">
+                        <span className="text-slate-500 text-[9px] mr-0.5">vs</span>
+                        {sel.fixture?.away_team}
+                      </div>
+                      {sel.fixture?.home_score !== null &&
+                        sel.fixture?.away_score !== null && (
+                          <div className="text-amber-400 font-bold mt-0.5 text-[10px]">
+                            {sel.fixture?.home_score}-{sel.fixture?.away_score}
+                            {sel.total_goals !== null && (
+                              <span className="text-slate-400 font-normal ml-0.5">({sel.total_goals}g)</span>
+                            )}
+                          </div>
+                        )}
                     </div>
+                    <div className="flex-shrink-0">{getResultBadge(sel.result)}</div>
                   </div>
                 ))}
               </div>

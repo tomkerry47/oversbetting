@@ -17,6 +17,14 @@ export function getUKNow(): Date {
  * - Mon-Fri, returns the coming Saturday
  */
 export function getRelevantSaturday(): string {
+  // TEMP: Use a test date for development when system date is in future
+  // Remove this after testing with real fixtures
+  const TEST_DATE = process.env.NEXT_PUBLIC_TEST_DATE;
+  if (TEST_DATE) {
+    console.log(`Using test date: ${TEST_DATE}`);
+    return TEST_DATE;
+  }
+
   const now = getUKNow();
 
   if (isSaturday(now)) {
