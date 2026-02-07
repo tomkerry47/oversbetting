@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 15, 23, 42;
+  --background-end-rgb: 30, 41, 59;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      rgb(var(--background-start-rgb)),
+      rgb(var(--background-end-rgb))
+    );
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .card {
+    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-xl p-6 shadow-lg;
+  }
+
+  .card-compact {
+    @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg p-4 shadow-md;
+  }
+
+  .btn-primary {
+    @apply bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-4
+      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+      shadow-md hover:shadow-emerald-500/25;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2 px-4
+      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white font-semibold py-2 px-4
+      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-gold {
+    @apply bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 px-4
+      rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .badge-won {
+    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-lost {
+    @apply bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-pending {
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(30, 41, 59);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(71, 85, 105);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(100, 116, 139);
+}
+
+/* Animate selection */
+.fixture-selectable {
+  @apply transition-all duration-200 cursor-pointer;
+}
+
+.fixture-selectable:hover {
+  @apply scale-[1.02] shadow-lg;
+}
+
+.fixture-selected {
+  @apply ring-2 ring-emerald-500 bg-emerald-900/30;
+}
