@@ -5,9 +5,9 @@ import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Picks', icon: '🏟️' },
+  { href: '/history', label: 'History', icon: '📅' },
   { href: '/stats', label: 'Stats', icon: '📊' },
   { href: '/fines', label: 'Fines', icon: '💰' },
-  { href: '/history', label: 'History', icon: '📅' },
 ];
 
 export default function Navigation() {
