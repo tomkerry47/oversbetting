@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 const API_BASE = 'https://api.sofascore.com/api/v1';
 
 // Our target leagues

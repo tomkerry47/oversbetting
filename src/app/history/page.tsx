@@ -10,6 +10,7 @@ export default function HistoryPage() {
     Record<number, { selections: Selection[]; fines: Fine[] }>
   >({});
   const [loading, setLoading] = useState(true);
+  const [checkingResults, setCheckingResults] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchWeeks = async () => {
@@ -45,6 +46,35 @@ export default function HistoryPage() {
       setExpandedWeek(weekId);
     } catch {
       // ignore
+    }
+  };
+
+  const handleCheckResults = async (weekId: number, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card collapse
+    setCheckingResults(weekId);
+    
+    try {
+      const res = await fetch('/api/results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_id: weekId }),
+      });
+      if (res.ok) {
+        // Reload week data to show updated results
+        const dataRes = await fetch(`/api/history?week_id=${weekId}`);
+        const data = await dataRes.json();
+        setWeekData((prev) => ({
+          ...prev,
+          [weekId]: {
+            selections: data.selections || [],
+            fines: data.fines || [],
+          },
+        }));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCheckingResults(null);
     }
   };
 
@@ -92,32 +122,47 @@ export default function HistoryPage() {
               <div
                 key={week.id}
                 className="card cursor-pointer transition-all active:scale-[0.98]"
-                onClick={() => loadWeekDetails(week.id)}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-white">
-                      Week {week.week_number}
-                    </h3>
-                    <p className="text-slate-400 text-xs">
-                      {new Date(week.saturday_date).toLocaleDateString('en-GB', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                    </p>
+                <div onClick={() => loadWeekDetails(week.id)}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-white">
+                        Week {week.week_number}
+                        {week.status === 'active' && (
+                          <span className="text-xs text-emerald-400 ml-2">● Active</span>
+                        )}
+                      </h3>
+                      <p className="text-slate-400 text-xs">
+                        {new Date(week.saturday_date).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                    <span className="text-2xl transition-transform duration-200"
+                      style={{
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    >
+                      ▾
+                    </span>
                   </div>
-                  <span className="text-2xl transition-transform duration-200"
-                    style={{
-                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                    }}
-                  >
-                    ▾
-                  </span>
                 </div>
 
                 {isExpanded && data && (
                   <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
+                    {/* Check Results Button */}
+                    {data.selections.length > 0 && (
+                      <button
+                        onClick={(e) => handleCheckResults(week.id, e)}
+                        disabled={checkingResults === week.id}
+                        className="btn-gold w-full py-2 text-sm mb-2"
+                      >
+                        {checkingResults === week.id ? 'Checking...' : '🔍 Check Results'}
+                      </button>
+                    )}
+                    
                     {PLAYERS.map((player) => {
                       const playerSelections = data.selections.filter(
                         (s) => s.player_name === player

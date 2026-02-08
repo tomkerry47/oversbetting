@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ week, selections, fines });
     }
 
-    // All completed weeks
+    // All weeks (both active and completed)
     const { data: weeks } = await supabase
       .from('weeks')
       .select('*')
-      .eq('status', 'completed')
+      .in('status', ['active', 'completed'])
       .order('saturday_date', { ascending: false });
 
     return NextResponse.json({ weeks: weeks || [] });

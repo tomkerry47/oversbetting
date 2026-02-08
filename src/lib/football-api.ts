@@ -139,17 +139,22 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
 export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixture[]> {
   if (fixtureIds.length === 0) return [];
   
+  console.log(`[fetchFixtureResults] Fetching results for ${fixtureIds.length} fixtures`);
+  
   const allFixtures: APIFixture[] = [];
   
   // Fetch each event individually
   for (const fixtureId of fixtureIds) {
     try {
+      console.log(`[fetchFixtureResults] Fetching event ${fixtureId}`);
       const data = await apiRequest(`/event/${fixtureId}`);
       const event = data.event;
       
       if (event) {
         const tournament = event.tournament?.uniqueTournament;
         const leagueName = SOFASCORE_TOURNAMENTS[String(tournament?.id)]?.name || tournament?.name || 'Unknown';
+        
+        console.log(`[fetchFixtureResults] Event ${fixtureId}: ${event.homeTeam?.name} ${event.homeScore?.current ?? 'N/A'} - ${event.awayScore?.current ?? 'N/A'} ${event.awayTeam?.name} (${event.status?.type})`);
         
         allFixtures.push({
           fixture: {
@@ -189,6 +194,7 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
     }
   }
   
+  console.log(`[fetchFixtureResults] Successfully fetched ${allFixtures.length} results`);
   return allFixtures;
 }
 

@@ -9,18 +9,41 @@ import { GOAL_THRESHOLD } from '@/types';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get active week
-    const { data: week } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('status', 'active')
-      .order('saturday_date', { ascending: false })
-      .limit(1)
-      .single();
+    // Try to get week_id from request body first (for History page re-checks)
+    let weekId: number | null = null;
+    try {
+      const body = await request.json();
+      weekId = body.week_id;
+    } catch {
+      // No body, will use active week
+    }
+
+    let week;
+    if (weekId) {
+      // Specific week requested
+      const { data } = await supabase
+        .from('weeks')
+        .select('*')
+        .eq('id', weekId)
+        .single();
+      week = data;
+    } else {
+      // Get active week
+      const { data } = await supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'active')
+        .order('saturday_date', { ascending: false })
+        .limit(1)
+        .single();
+      week = data;
+    }
 
     if (!week) {
-      return NextResponse.json({ error: 'No active week found' }, { status: 404 });
+      return NextResponse.json({ error: 'No week found' }, { status: 404 });
     }
+
+    console.log(`[Results] Checking results for week ${week.id} (${week.saturday_date})`);
 
     // Get all fixtures for the week
     const { data: fixtures } = await supabase
@@ -32,13 +55,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No fixtures found for this week' }, { status: 404 });
     }
 
+    console.log(`[Results] Found ${fixtures.length} fixtures for week ${week.id}`);
+
     // Fetch latest results from API
     const apiFixtureIds = fixtures.map((f) => f.api_fixture_id);
+    console.log(`[Results] Fetching results for fixture IDs:`, apiFixtureIds);
+    
     const apiResults = await fetchFixtureResults(apiFixtureIds);
+    console.log(`[Results] API returned ${apiResults.length} results`);
 
     // Update fixture scores in DB
     for (const result of apiResults) {
-      await supabase
+      console.log(`[Results] Updating fixture ${result.fixture.id}: ${result.teams.home.name} ${result.goals.home} - ${result.goals.away} ${result.teams.away.name} (${result.fixture.status.short})`);
+      
+      const { error: updateError } = await supabase
         .from('fixtures')
         .update({
           home_score: result.goals.home,
@@ -46,6 +76,10 @@ export async function POST(request: NextRequest) {
           match_status: result.fixture.status.short,
         })
         .eq('api_fixture_id', result.fixture.id);
+      
+      if (updateError) {
+        console.error(`[Results] Error updating fixture ${result.fixture.id}:`, updateError);
+      }
     }
 
     // Re-fetch updated fixtures
@@ -64,6 +98,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No selections found' }, { status: 404 });
     }
 
+    console.log(`[Results] Found ${selections.length} selections to process`);
+
     // Update each selection result
     const fineEntries: Array<{
       week_id: number;
@@ -79,17 +115,21 @@ export async function POST(request: NextRequest) {
     for (const sel of selections) {
       const fixture = sel.fixture;
       if (!fixture || fixture.home_score === null || fixture.away_score === null) {
+        console.log(`[Results] Skipping selection ${sel.id} - no scores yet for ${fixture?.home_team} vs ${fixture?.away_team}`);
         continue; // Match not finished yet
       }
 
       // FT, AET, or PEN statuses indicate match is complete
       const completedStatuses = ['FT', 'AET', 'PEN'];
       if (!completedStatuses.includes(fixture.match_status)) {
+        console.log(`[Results] Skipping selection ${sel.id} - match status is ${fixture.match_status}`);
         continue;
       }
 
       const totalGoals = fixture.home_score + fixture.away_score;
       const won = totalGoals > GOAL_THRESHOLD;
+
+      console.log(`[Results] Processing ${sel.player_name}: ${fixture.home_team} ${fixture.home_score}-${fixture.away_score} ${fixture.away_team} (${totalGoals} goals, ${won ? 'WON' : 'LOST'})`);
 
       // Update selection result
       await supabase
@@ -151,13 +191,38 @@ export async function POST(request: NextRequest) {
 
     // Clear existing fines for this week (in case of re-check) then insert new ones
     if (fineEntries.length > 0) {
+      console.log(`[Results] Clearing existing fines and inserting ${fineEntries.length} new fines`);
+      
       await supabase
         .from('fines')
         .delete()
         .eq('week_id', week.id)
         .eq('cleared', false);
 
-      await supabase.from('fines').insert(fineEntries);
+      const { error: fineError } = await supabase.from('fines').insert(fineEntries);
+      if (fineError) {
+        console.error(`[Results] Error inserting fines:`, fineError);
+      }
+    } else {
+      console.log(`[Results] No fines to apply`);
+    }
+
+    // Mark week as completed if all selections have been processed
+    const allSelections = await supabase
+      .from('selections')
+      .select('result')
+      .eq('week_id', week.id);
+    
+    const hasSelections = allSelections.data && allSelections.data.length > 0;
+    const allProcessed = hasSelections && allSelections.data.every(s => s.result !== 'pending');
+    
+    if (allProcessed) {
+      console.log(`[Results] All selections processed - marking week ${week.id} as completed`);
+      await supabase
+        .from('weeks')
+        .update({ status: 'completed' })
+        .eq('id', week.id);
+      week.status = 'completed'; // Update local object
     }
 
     // Fetch final state
@@ -172,6 +237,8 @@ export async function POST(request: NextRequest) {
       .from('fines')
       .select('*')
       .eq('week_id', week.id);
+
+    console.log(`[Results] Complete. ${finalSelections?.length || 0} selections processed, ${weekFines?.length || 0} fines applied`);
 
     return NextResponse.json({
       week,

@@ -61,42 +61,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ week, fixtures: existingFixtures });
     }
 
-    // Fetch from API
-    console.log(`No fixtures in DB for ${saturdayDate}, fetching from API...`);
-    const apiFixtures = await fetchSaturdayFixtures(saturdayDate);
-    console.log(`API returned ${apiFixtures.length} fixtures`);
-
-    if (apiFixtures.length === 0) {
-      console.warn('No 15:00 fixtures found for this Saturday');
-      return NextResponse.json({ week, fixtures: [], message: 'No 15:00 fixtures available for this Saturday' });
-    }
-
-    // Store fixtures in DB
-    const fixtureRows = apiFixtures.map((f) => ({
-      api_fixture_id: f.fixture.id,
-      week_id: week!.id,
-      home_team: f.teams.home.name,
-      away_team: f.teams.away.name,
-      home_team_logo: f.teams.home.logo,
-      away_team_logo: f.teams.away.logo,
-      league_name: LEAGUE_IDS[f.league.id as keyof typeof LEAGUE_IDS] || f.league.name,
-      league_id: f.league.id,
-      kick_off: f.fixture.date,
-      home_score: f.goals.home,
-      away_score: f.goals.away,
-      match_status: f.fixture.status.short,
-    }));
-
-    const { data: insertedFixtures, error: insertError } = await supabase
-      .from('fixtures')
-      .upsert(fixtureRows, { onConflict: 'api_fixture_id' })
-      .select();
-
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ week, fixtures: insertedFixtures });
+    // No fixtures in DB - return empty array
+    // User can use refresh button to fetch from API if needed
+    console.log(`No fixtures in DB for ${saturdayDate}. Use refresh button to fetch.`);
+    return NextResponse.json({ week, fixtures: [], message: 'No fixtures loaded yet. Click refresh to fetch from SofaScore.' });
   } catch (err: any) {
     console.error('Fixtures API error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
