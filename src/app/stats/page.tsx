@@ -34,11 +34,18 @@ export default function StatsPage() {
   const [weeklyBreakdown, setWeeklyBreakdown] = useState<WeeklyBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<'30' | '90' | 'all'>('all');
 
   useEffect(() => {
     const fetchStats = async () => {
+      setLoading(true);
       try {
-        const res = await fetch('/api/stats');
+        const params = new URLSearchParams();
+        if (timeFilter !== 'all') {
+          params.append('days', timeFilter);
+        }
+        
+        const res = await fetch(`/api/stats?${params.toString()}`);
         const data = await res.json();
         setStats(data.stats || []);
         setWeeklyBreakdown(data.weeklyBreakdown || []);
@@ -49,7 +56,7 @@ export default function StatsPage() {
       }
     };
     fetchStats();
-  }, []);
+  }, [timeFilter]);
 
   if (loading) {
     return (
@@ -73,8 +80,46 @@ export default function StatsPage() {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h1 className="text-xl font-bold text-white">📊 Player Stats</h1>
-        <p className="text-slate-400 text-xs mt-1">Performance across all weeks</p>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-xl font-bold text-white">📊 Player Stats</h1>
+            <p className="text-slate-400 text-xs mt-1">Performance across all weeks</p>
+          </div>
+        </div>
+        
+        {/* Time Filter */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTimeFilter('30')}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+              timeFilter === '30'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            30 Days
+          </button>
+          <button
+            onClick={() => setTimeFilter('90')}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+              timeFilter === '90'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            90 Days
+          </button>
+          <button
+            onClick={() => setTimeFilter('all')}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+              timeFilter === 'all'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            All Time
+          </button>
+        </div>
       </div>
 
       {/* Leaderboard */}
@@ -163,10 +208,25 @@ export default function StatsPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-amber-400 font-bold text-base">
+                    <div className="text-blue-400 font-bold text-base">
+                      {stat.avg_goals.toFixed(1)}
+                    </div>
+                    <div className="text-slate-500 text-[10px]">Avg Goals</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-2 text-center">
+                  <div className="bg-slate-900/50 rounded-lg p-1.5">
+                    <div className="text-amber-400 font-bold text-sm">
                       £{stat.outstanding_fines.toFixed(0)}
                     </div>
                     <div className="text-slate-500 text-[10px]">Fines</div>
+                  </div>
+                  <div className="bg-slate-900/50 rounded-lg p-1.5">
+                    <div className="text-slate-300 font-bold text-sm">
+                      {stat.total_selections}
+                    </div>
+                    <div className="text-slate-500 text-[10px]">Picks</div>
                   </div>
                 </div>
 

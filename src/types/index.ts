@@ -9,6 +9,9 @@ export const MAX_SELECTIONS_PER_PLAYER = 2;
 
 // English top 5 + Scottish top 3 league IDs (api-football)
 export const LEAGUE_IDS = {
+  // Cups (priority display)
+  19: 'FA Cup',
+  347: 'Scottish Cup',
   // England
   39: 'Premier League',
   40: 'Championship',
@@ -83,6 +86,7 @@ export interface PlayerStats {
   cleared_fines: number;
   current_streak: number;
   best_streak: number;
+  avg_goals: number;
 }
 
 export interface WeekSummary {

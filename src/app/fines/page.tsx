@@ -15,6 +15,8 @@ export default function FinesPage() {
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState<string | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const fetchFines = async () => {
     try {
@@ -49,7 +51,22 @@ export default function FinesPage() {
   };
 
   const handleClearAll = async () => {
+    if (passwordInput !== 'OnlyTom') {
+      const sarcasticMessages = [
+        "Nice try, but you're not Tom 😏",
+        "Wrong password! Did you really think it'd be that easy? 🙄",
+        "Nope. Tom's in charge here, not you 💅",
+        "Access denied. This is Tom's territory 🚫",
+        "Good effort, but only Tom can wipe the slate clean 🤷",
+        "Password incorrect. Tom would've got it right first time 😎",
+      ];
+      const randomMessage = sarcasticMessages[Math.floor(Math.random() * sarcasticMessages.length)];
+      setPasswordError(randomMessage);
+      return;
+    }
+
     setClearing('all');
+    setPasswordError('');
     try {
       await fetch('/api/fines', {
         method: 'POST',
@@ -58,6 +75,7 @@ export default function FinesPage() {
       });
       await fetchFines();
       setShowConfirm(null);
+      setPasswordInput('');
     } finally {
       setClearing(null);
     }
@@ -195,20 +213,46 @@ export default function FinesPage() {
               </p>
             </div>
             {showConfirm === 'all' ? (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowConfirm(null)}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleClearAll}
-                  disabled={clearing === 'all'}
-                  className="btn-danger flex-1"
-                >
-                  {clearing === 'all' ? 'Clearing...' : 'Confirm Clear All'}
-                </button>
+              <div className="space-y-3">
+                <div>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      setPasswordError('');
+                    }}
+                    placeholder="Enter password..."
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleClearAll();
+                      }
+                    }}
+                  />
+                  {passwordError && (
+                    <p className="text-amber-400 text-xs mt-2">{passwordError}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfirm(null);
+                      setPasswordInput('');
+                      setPasswordError('');
+                    }}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    disabled={clearing === 'all' || !passwordInput}
+                    className="btn-danger flex-1"
+                  >
+                    {clearing === 'all' ? 'Clearing...' : 'Confirm Clear All'}
+                  </button>
+                </div>
               </div>
             ) : (
               <button

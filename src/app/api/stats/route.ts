@@ -9,15 +9,29 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const player = url.searchParams.get('player');
+    const days = url.searchParams.get('days'); // '30', '90', or null for all time
+
+    // Calculate date cutoff if days filter is provided
+    let dateCutoff: string | null = null;
+    if (days) {
+      const daysNum = parseInt(days);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysNum);
+      dateCutoff = cutoffDate.toISOString().split('T')[0];
+    }
 
     // Get all selections with fixtures
     let selectionsQuery = supabase
       .from('selections')
-      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score)')
+      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score), week:weeks!inner(saturday_date)')
       .order('created_at', { ascending: true });
 
     if (player) {
       selectionsQuery = selectionsQuery.eq('player_name', player);
+    }
+    
+    if (dateCutoff) {
+      selectionsQuery = selectionsQuery.gte('week.saturday_date', dateCutoff);
     }
 
     const { data: allSelections } = await selectionsQuery;
@@ -85,6 +99,18 @@ export async function GET(request: NextRequest) {
         .filter((f) => f.cleared)
         .reduce((sum, f) => sum + parseFloat(f.amount), 0);
 
+      // Calculate average goals per selection
+      const selectionsWithGoals = playerSelections.filter(
+        (s) => s.total_goals !== null && s.total_goals !== undefined
+      );
+      const totalGoals = selectionsWithGoals.reduce(
+        (sum, s) => sum + (s.total_goals || 0),
+        0
+      );
+      const avgGoals = selectionsWithGoals.length > 0
+        ? totalGoals / selectionsWithGoals.length
+        : 0;
+
       stats.push({
         player_name: p,
         total_selections: total,
@@ -97,6 +123,7 @@ export async function GET(request: NextRequest) {
         cleared_fines: clearedFines,
         current_streak: currentStreak,
         best_streak: bestStreak,
+        avg_goals: parseFloat(avgGoals.toFixed(2)),
       });
     }
 

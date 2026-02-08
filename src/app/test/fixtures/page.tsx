@@ -19,6 +19,7 @@ export default function TestFixturesPage() {
   const [loading, setLoading] = useState(false);
   const [fixtures, setFixtures] = useState<RawFixture[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showAllLeagues, setShowAllLeagues] = useState(false);
 
   const fetchFixtures = async () => {
     setLoading(true);
@@ -26,7 +27,7 @@ export default function TestFixturesPage() {
     setFixtures([]);
 
     try {
-      const res = await fetch(`/api/test/fixtures?date=${date}`);
+      const res = await fetch(`/api/test/fixtures?date=${date}&showAll=${showAllLeagues}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -64,6 +65,26 @@ export default function TestFixturesPage() {
               onChange={(e) => setDate(e.target.value)}
               className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600"
             />
+          </div>
+
+          <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+            <div>
+              <label className="text-sm font-medium text-white">Show All Leagues</label>
+              <p className="text-xs text-slate-400 mt-0.5">Display all available leagues (not just target 9)</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAllLeagues(!showAllLeagues)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                showAllLeagues ? 'bg-emerald-500' : 'bg-slate-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  showAllLeagues ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
 
           <button

@@ -5,11 +5,16 @@ const API_BASE = 'https://api.sofascore.com/api/v1';
 
 // SofaScore tournament IDs for our leagues
 const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
+  // Cups (priority)
+  '19': { id: 19, name: 'FA Cup' },
+  '347': { id: 347, name: 'Scottish Cup' },
+  // England
   '17': { id: 17, name: 'Premier League' },
   '18': { id: 18, name: 'Championship' },
   '24': { id: 24, name: 'League One' },
   '25': { id: 25, name: 'League Two' },
   '173': { id: 173, name: 'National League' },
+  // Scotland
   '36': { id: 36, name: 'Scottish Premiership' },
   '206': { id: 206, name: 'Scottish Championship' },
   '207': { id: 207, name: 'Scottish League One' },

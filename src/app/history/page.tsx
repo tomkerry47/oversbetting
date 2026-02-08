@@ -70,6 +70,13 @@ export default function HistoryPage() {
             fines: data.fines || [],
           },
         }));
+        
+        // Update the week in the weeks list to reflect status change
+        if (data.week) {
+          setWeeks((prev) =>
+            prev.map((w) => (w.id === weekId ? data.week : w))
+          );
+        }
       }
     } catch {
       // ignore
@@ -130,6 +137,9 @@ export default function HistoryPage() {
                         Week {week.week_number}
                         {week.status === 'active' && (
                           <span className="text-xs text-emerald-400 ml-2">● Active</span>
+                        )}
+                        {week.status === 'completed' && (
+                          <span className="text-xs text-blue-400 ml-2">✓ Completed</span>
                         )}
                       </h3>
                       <p className="text-slate-400 text-xs">

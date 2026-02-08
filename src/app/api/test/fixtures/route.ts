@@ -7,6 +7,8 @@ const API_BASE = 'https://api.sofascore.com/api/v1';
 
 // Our target leagues
 const TARGET_LEAGUES = {
+  19: 'FA Cup',
+  347: 'Scottish Cup',
   17: 'Premier League',
   18: 'Championship',
   24: 'League One',
@@ -15,14 +17,16 @@ const TARGET_LEAGUES = {
   36: 'Scottish Premiership',
   206: 'Scottish Championship',
   207: 'Scottish League One',
+  209: 'Scottish League Two',
 };
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || '2026-02-07';
+    const showAll = searchParams.get('showAll') === 'true';
 
-    console.log(`Fetching fixtures for ${date}`);
+    console.log(`Fetching fixtures for ${date} (showAll: ${showAll})`);
 
     const url = `${API_BASE}/sport/football/scheduled-events/${date}`;
     const res = await fetch(url, {
@@ -48,7 +52,8 @@ export async function GET(request: NextRequest) {
     const fixtures = events
       .filter((event: any) => {
         const leagueId = event.tournament?.uniqueTournament?.id;
-        return TARGET_LEAGUES.hasOwnProperty(leagueId);
+        // If showAll is true, include all leagues, otherwise only target leagues
+        return showAll || TARGET_LEAGUES.hasOwnProperty(leagueId);
       })
       .map((event: any) => {
         const kickOff = new Date(event.startTimestamp * 1000);
@@ -73,7 +78,7 @@ export async function GET(request: NextRequest) {
       })
       .filter((f: any) => f.is3pm);
 
-    console.log(`Found ${fixtures.length} fixtures at 15:00 from target leagues`);
+    console.log(`Found ${fixtures.length} fixtures at 15:00${showAll ? ' from all leagues' : ' from target leagues'}`);
 
     // Get league summary
     const leagueCounts = fixtures.reduce((acc: Record<string, number>, f: any) => {

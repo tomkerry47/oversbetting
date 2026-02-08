@@ -40,15 +40,17 @@ export default function FixtureSelector({
 
   // Define league order (by league ID mapping)
   const leagueOrder: Record<string, number> = {
-    'Premier League': 1,
-    'Championship': 2,
-    'League One': 3,
-    'League Two': 4,
-    'National League': 5,
-    'Scottish Premiership': 6,
-    'Scottish Championship': 7,
-    'Scottish League Two': 8,
-    'Scottish League One': 9,
+    'FA Cup': 1,
+    'Scottish Cup': 2,
+    'Premier League': 3,
+    'Championship': 4,
+    'League One': 5,
+    'League Two': 6,
+    'National League': 7,
+    'Scottish Premiership': 8,
+    'Scottish Championship': 9,
+    'Scottish League Two': 10,
+    'Scottish League One': 11,
   };
 
   // Sort leagues by defined order
