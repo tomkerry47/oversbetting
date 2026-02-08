@@ -163,38 +163,6 @@ export default function FinesPage() {
                 <span>Total all-time: £{playerSummary.total.toFixed(2)}</span>
                 <span>Cleared: £{playerSummary.cleared.toFixed(2)}</span>
               </div>
-
-              {/* Clear button */}
-              {playerSummary.outstanding > 0 && (
-                <div className="mt-3">
-                  {showConfirm === player ? (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowConfirm(null)}
-                        className="btn-secondary text-xs flex-1"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleClearPlayer(player)}
-                        disabled={clearing === player}
-                        className="btn-primary text-xs flex-1"
-                      >
-                        {clearing === player
-                          ? 'Clearing...'
-                          : `Clear £${playerSummary.outstanding.toFixed(2)}`}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowConfirm(player)}
-                      className="btn-secondary text-xs w-full"
-                    >
-                      Mark as Paid
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}

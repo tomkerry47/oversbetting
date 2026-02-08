@@ -162,17 +162,6 @@ export default function HistoryPage() {
 
                 {isExpanded && data && (
                   <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
-                    {/* Check Results Button */}
-                    {data.selections.length > 0 && (
-                      <button
-                        onClick={(e) => handleCheckResults(week.id, e)}
-                        disabled={checkingResults === week.id}
-                        className="btn-gold w-full py-2 text-sm mb-2"
-                      >
-                        {checkingResults === week.id ? 'Checking...' : '🔍 Check Results'}
-                      </button>
-                    )}
-                    
                     {PLAYERS.map((player) => {
                       const playerSelections = data.selections.filter(
                         (s) => s.player_name === player
@@ -227,6 +216,21 @@ export default function HistoryPage() {
                         </div>
                       );
                     })}
+                    
+                    {/* Check Results Button - at bottom, subtle for completed weeks */}
+                    {data.selections.length > 0 && (
+                      <button
+                        onClick={(e) => handleCheckResults(week.id, e)}
+                        disabled={checkingResults === week.id}
+                        className={`w-full py-2 text-xs rounded-lg transition-all ${
+                          week.status === 'completed'
+                            ? 'bg-slate-700 text-slate-400 hover:bg-slate-600 mt-2'
+                            : 'btn-gold text-sm'
+                        }`}
+                      >
+                        {checkingResults === week.id ? 'Checking...' : '🔍 Re-check Results'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
