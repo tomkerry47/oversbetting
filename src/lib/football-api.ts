@@ -21,30 +21,66 @@ const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
   '209': { id: 209, name: 'Scottish League Two' },
 };
 
-async function apiRequest(endpoint: string) {
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function apiRequest(endpoint: string, retries = 3) {
   const url = `${API_BASE}${endpoint}`;
   console.log(`SofaScore API request: ${url}`);
 
-  const res = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-    },
-    cache: 'no-store', // Disable caching - responses are too large (3MB+)
-  });
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-GB,en;q=0.9',
+          'Referer': 'https://www.sofascore.com/',
+          'Origin': 'https://www.sofascore.com',
+          'DNT': '1',
+          'Sec-Fetch-Dest': 'empty',
+          'Sec-Fetch-Mode': 'cors',
+          'Sec-Fetch-Site': 'same-site',
+        },
+        cache: 'no-store', // Disable caching - responses are too large (3MB+)
+      });
 
-  if (!res.ok) {
-    const errorBody = await res.text();
-    console.error(`SofaScore API error: ${res.status} ${res.statusText}`, errorBody);
-    throw new Error(`SofaScore API error: ${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        const errorBody = await res.text();
+        console.error(`SofaScore API error: ${res.status} ${res.statusText}`, errorBody);
+        
+        // If 403 challenge and we have retries left, wait and try again
+        if (res.status === 403 && i < retries - 1) {
+          const delay = Math.pow(2, i) * 1000; // Exponential backoff: 1s, 2s, 4s
+          console.log(`Retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
+          await sleep(delay);
+          continue;
+        }
+        
+        throw new Error(`SofaScore API error: ${res.status} ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      console.log(`SofaScore API response:`, { 
+        endpoint,
+        eventCount: data.events?.length || 0
+      });
+      
+      return data;
+    } catch (error) {
+      // If network error and we have retries left, try again
+      if (i < retries - 1) {
+        const delay = Math.pow(2, i) * 1000;
+        console.log(`Network error, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
+        await sleep(delay);
+        continue;
+      }
+      throw error;
+    }
   }
-
-  const data = await res.json();
-  console.log(`SofaScore API response:`, { 
-    endpoint,
-    eventCount: data.events?.length || 0
-  });
   
-  return data;
+  throw new Error('Max retries exceeded');
 }
 
 /**
