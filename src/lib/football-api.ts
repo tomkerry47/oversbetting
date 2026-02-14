@@ -109,6 +109,12 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
         continue;
       }
 
+      // Skip postponed matches
+      if (event.status?.type === 'postponed') {
+        console.log(`Skipping postponed match: ${event.homeTeam?.name} vs ${event.awayTeam?.name}`);
+        continue;
+      }
+
       const kickOff = new Date(event.startTimestamp * 1000);
       const ukTime = kickOff.toLocaleTimeString('en-GB', {
         timeZone: 'Europe/London',
