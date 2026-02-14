@@ -200,8 +200,17 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
   
   const allFixtures: APIFixture[] = [];
   
-  // Fetch each event individually
-  for (const fixtureId of fixtureIds) {
+  // Fetch each event individually with delays to avoid rate limiting
+  for (let i = 0; i < fixtureIds.length; i++) {
+    const fixtureId = fixtureIds[i];
+    
+    // Add delay between requests (except first one) to avoid triggering anti-bot
+    if (i > 0) {
+      const delay = 500 + Math.random() * 500; // 500-1000ms random delay
+      console.log(`[fetchFixtureResults] Waiting ${Math.round(delay)}ms before next request...`);
+      await sleep(delay);
+    }
+    
     try {
       console.log(`[fetchFixtureResults] Fetching event ${fixtureId}`);
       const data = await apiRequest(`/event/${fixtureId}`);
