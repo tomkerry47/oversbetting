@@ -23,6 +23,8 @@ interface FixtureDetails {
     awayScore: number;
     opponent: string;
     homeAway: string;
+    date: string;
+    competition: string;
   }>;
   awayForm: Array<{
     result: string;
@@ -30,11 +32,12 @@ interface FixtureDetails {
     awayScore: number;
     opponent: string;
     homeAway: string;
+    date: string;
+    competition: string;
   }>;
   odds: {
-    home: string;
-    draw: string;
-    away: string;
+    over: string;
+    under: string;
   } | null;
 }
 
