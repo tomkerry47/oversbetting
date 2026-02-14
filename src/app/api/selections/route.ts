@@ -120,9 +120,77 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Check if all selections are now complete (4 players × 2 selections = 8)
+    const { data: allSelections } = await supabase
+      .from('selections')
+      .select('*')
+      .eq('week_id', week_id);
+
+    if (allSelections && allSelections.length === PLAYERS.length * MAX_SELECTIONS_PER_PLAYER) {
+      // All selections complete - trigger webhook
+      await triggerWebhook(week_id, week, allSelections);
+    }
+
     return NextResponse.json({ selections });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * Trigger webhook when all selections are complete
+ */
+async function triggerWebhook(weekId: number, week: any, selections: any[]) {
+  const webhookUrl = process.env.SELECTIONS_COMPLETE_WEBHOOK_URL;
+  
+  if (!webhookUrl) {
+    console.log('No webhook URL configured');
+    return;
+  }
+
+  try {
+    // Get full selection details with fixtures
+    const { data: fullSelections } = await supabase
+      .from('selections')
+      .select('*, fixture:fixtures(*)')
+      .eq('week_id', weekId)
+      .order('player_name', { ascending: true });
+
+    const payload = {
+      event: 'selections_complete',
+      week_id: weekId,
+      saturday_date: week.saturday_date,
+      total_selections: selections.length,
+      players_submitted: PLAYERS.length,
+      selections: fullSelections,
+      summary: fullSelections?.reduce((acc: any, sel: any) => {
+        if (!acc[sel.player_name]) {
+          acc[sel.player_name] = [];
+        }
+        acc[sel.player_name].push({
+          home_team: sel.fixture.home_team,
+          away_team: sel.fixture.away_team,
+          kick_off: sel.fixture.kick_off_time,
+        });
+        return acc;
+      }, {}),
+    };
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      console.error('Webhook failed:', response.status, await response.text());
+    } else {
+      console.log('Webhook triggered successfully');
+    }
+  } catch (error) {
+    console.error('Error triggering webhook:', error);
   }
 }
 
