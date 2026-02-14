@@ -10,6 +10,31 @@ interface FixtureSelectorProps {
   onSelectionSubmitted: () => void;
 }
 
+interface FixtureDetails {
+  homeForm: Array<{
+    result: 'W' | 'D' | 'L';
+    homeScore: number;
+    awayScore: number;
+    opponent: string;
+    homeAway: 'H' | 'A';
+    date: string;
+    competition: string;
+  }>;
+  awayForm: Array<{
+    result: 'W' | 'D' | 'L';
+    homeScore: number;
+    awayScore: number;
+    opponent: string;
+    homeAway: 'H' | 'A';
+    date: string;
+    competition: string;
+  }>;
+  odds: {
+    over: string;
+    under: string;
+  } | null;
+}
+
 export default function FixtureSelector({
   fixtures,
   weekId,
@@ -21,6 +46,8 @@ export default function FixtureSelector({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [expandedFixture, setExpandedFixture] = useState<number | null>(null);
+  const [fixtureDetails, setFixtureDetails] = useState<Record<number, FixtureDetails>>({});
 
   // Group fixtures by league
   const groupedFixtures = fixtures.reduce<Record<string, Fixture[]>>((acc, f) => {
@@ -65,6 +92,52 @@ export default function FixtureSelector({
       ...prev,
       [league]: !prev[league]
     }));
+  };
+
+  const convertOddsToDecimal = (odds: string): string => {
+    if (!odds || odds === 'N/A') return odds;
+    if (odds.includes('.')) return odds;
+    if (odds.includes('/')) {
+      const parts = odds.split('/');
+      const numerator = parseFloat(parts[0]);
+      const denominator = parseFloat(parts[1]);
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return ((numerator / denominator) + 1).toFixed(2);
+      }
+    }
+    return odds;
+  };
+
+  const fetchFixtureDetails = async (fixture: Fixture) => {
+    if (!fixture.home_team_id || !fixture.away_team_id) {
+      console.error('Missing team IDs for fixture');
+      return;
+    }
+
+    if (fixtureDetails[fixture.id]) {
+      setExpandedFixture(expandedFixture === fixture.id ? null : fixture.id);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/test/fixture-details?fixtureId=${fixture.api_fixture_id}&homeTeamId=${fixture.home_team_id}&awayTeamId=${fixture.away_team_id}&leagueId=${fixture.league_id}`
+      );
+      const data = await res.json();
+
+      if (res.ok) {
+        if (data.odds) {
+          data.odds = {
+            over: convertOddsToDecimal(data.odds.over),
+            under: convertOddsToDecimal(data.odds.under),
+          };
+        }
+        setFixtureDetails(prev => ({ ...prev, [fixture.id]: data }));
+        setExpandedFixture(fixture.id);
+      }
+    } catch (err) {
+      console.error('Error fetching fixture details:', err);
+    }
   };
 
   const handleFixtureToggle = (fixtureId: number) => {
@@ -203,44 +276,126 @@ export default function FixtureSelector({
                       const isFull =
                         selectedFixtures.length >= MAX_SELECTIONS_PER_PLAYER &&
                         !isSelected;
+                      const isExpanded = expandedFixture === fixture.id;
+                      const details = fixtureDetails[fixture.id];
 
                       return (
-                        <button
-                          key={fixture.id}
-                          onClick={() => handleFixtureToggle(fixture.id)}
-                          disabled={isFull}
-                          className={`w-full text-left p-3 rounded-xl border transition-all
-                            fixture-selectable
-                            ${
-                              isSelected
-                                ? 'fixture-selected border-emerald-500'
-                                : isFull
-                                ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
-                                : 'border-slate-700 bg-slate-800/50'
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
-                                ${
-                                  isSelected
-                                    ? 'border-emerald-500 bg-emerald-500 text-white'
-                                    : 'border-slate-500'
-                                }`}
-                            >
-                              {isSelected && '✓'}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-white truncate">
-                                {fixture.home_team}
+                        <div key={fixture.id}>
+                          <button
+                            onClick={() => handleFixtureToggle(fixture.id)}
+                            disabled={isFull}
+                            className={`w-full text-left p-3 border transition-all fixture-selectable
+                              ${
+                                isSelected
+                                  ? 'fixture-selected border-emerald-500'
+                                  : isFull
+                                  ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
+                                  : 'border-slate-700 bg-slate-800/50'
+                              }
+                              ${isExpanded ? 'rounded-t-xl border-b-0' : 'rounded-xl'}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
+                                  ${
+                                    isSelected
+                                      ? 'border-emerald-500 bg-emerald-500 text-white'
+                                      : 'border-slate-500'
+                                  }`}
+                              >
+                                {isSelected && '✓'}
                               </div>
-                              <div className="text-sm font-medium text-white truncate">
-                                <span className="text-slate-500 text-xs mr-1">vs</span>
-                                {fixture.away_team}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-white truncate">
+                                  {fixture.home_team}
+                                </div>
+                                <div className="text-sm font-medium text-white truncate">
+                                  <span className="text-slate-500 text-xs mr-1">vs</span>
+                                  {fixture.away_team}
+                                </div>
+                              </div>
+                              {fixture.home_team_id && fixture.away_team_id && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    fetchFixtureDetails(fixture);
+                                  }}
+                                  className="text-blue-400 text-xs hover:text-blue-300 px-2 py-1 rounded bg-slate-700/50"
+                                >
+                                  {isExpanded ? '▲' : '▼'}
+                                </button>
+                              )}
+                            </div>
+                          </button>
+
+                          {isExpanded && details && (
+                            <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
+                              {details.odds && (
+                                <div className="mb-3 bg-gradient-to-r from-amber-900/20 to-amber-800/20 border border-amber-700/50 rounded-lg p-2">
+                                  <h4 className="text-xs font-bold text-amber-400 mb-1.5">💰 O/U 2.5</h4>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-slate-800 rounded p-1.5 text-center">
+                                      <div className="text-[9px] uppercase text-slate-400">Over</div>
+                                      <div className="text-sm font-bold text-emerald-400">{details.odds.over}</div>
+                                    </div>
+                                    <div className="bg-slate-800 rounded p-1.5 text-center">
+                                      <div className="text-[9px] uppercase text-slate-400">Under</div>
+                                      <div className="text-sm font-bold text-sky-400">{details.odds.under}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div>
+                                <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
+                                <div className="space-y-2">
+                                  <div>
+                                    <div className="text-[10px] text-slate-400 mb-1">{fixture.home_team}</div>
+                                    <div className="flex gap-1 mb-1">
+                                      {details.homeForm.map((match, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
+                                            ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
+                                        >
+                                          {match.result}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      {details.homeForm.map((match, idx) => (
+                                        <div key={idx} className="text-[9px] text-slate-400">
+                                          {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-slate-400 mb-1">{fixture.away_team}</div>
+                                    <div className="flex gap-1 mb-1">
+                                      {details.awayForm.map((match, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
+                                            ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
+                                        >
+                                          {match.result}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      {details.awayForm.map((match, idx) => (
+                                        <div key={idx} className="text-[9px] text-slate-400">
+                                          {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </button>
+                          )}
+                        </div>
                       );
                     })}
                   </div>

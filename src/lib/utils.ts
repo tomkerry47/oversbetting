@@ -15,29 +15,36 @@ export function getUKNow(): Date {
  * - On Saturday, returns today
  * - On Sunday, returns next Saturday (new week)
  * - Mon-Fri, returns the coming Saturday
+ * @param weekOffset - Number of weeks to offset (0 = current, 1 = next, -1 = previous)
  */
-export function getRelevantSaturday(): string {
+export function getRelevantSaturday(weekOffset: number = 0): string {
   // TEMP: Use a test date for development when system date is in future
   // Remove this after testing with real fixtures
   const TEST_DATE = process.env.NEXT_PUBLIC_TEST_DATE;
   if (TEST_DATE) {
     console.log(`Using test date: ${TEST_DATE}`);
-    return TEST_DATE;
+    const testDate = new Date(TEST_DATE);
+    testDate.setDate(testDate.getDate() + (weekOffset * 7));
+    return format(testDate, 'yyyy-MM-dd');
   }
 
   const now = getUKNow();
 
+  let saturday: Date;
   if (isSaturday(now)) {
-    return format(now, 'yyyy-MM-dd');
-  }
-
-  if (isSunday(now)) {
+    saturday = now;
+  } else if (isSunday(now)) {
     // Sunday = new week, target next Saturday
-    return format(nextSaturday(now), 'yyyy-MM-dd');
+    saturday = nextSaturday(now);
+  } else {
+    // Mon-Fri: target coming Saturday
+    saturday = nextSaturday(now);
   }
 
-  // Mon-Fri: target coming Saturday
-  return format(nextSaturday(now), 'yyyy-MM-dd');
+  // Apply week offset
+  saturday.setDate(saturday.getDate() + (weekOffset * 7));
+  
+  return format(saturday, 'yyyy-MM-dd');
 }
 
 /**

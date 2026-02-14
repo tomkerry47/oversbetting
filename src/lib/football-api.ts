@@ -31,31 +31,44 @@ async function apiRequest(endpoint: string, retries = 3) {
 
   for (let i = 0; i < retries; i++) {
     try {
+      // Add small random delay before each request to avoid rate limiting
+      if (i > 0) {
+        const jitter = Math.random() * 500; // 0-500ms random jitter
+        const delay = Math.pow(2, i) * 1000 + jitter; // Exponential backoff with jitter
+        console.log(`Retrying in ${Math.round(delay)}ms... (attempt ${i + 1}/${retries})`);
+        await sleep(delay);
+      }
+
       const res = await fetch(url, {
         headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-GB,en;q=0.9',
-          'Referer': 'https://www.sofascore.com/',
-          'Origin': 'https://www.sofascore.com',
+          'Accept': '*/*',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
           'DNT': '1',
+          'Host': 'api.sofascore.com',
+          'Origin': 'https://www.sofascore.com',
+          'Pragma': 'no-cache',
+          'Referer': 'https://www.sofascore.com/',
+          'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"macOS"',
           'Sec-Fetch-Dest': 'empty',
           'Sec-Fetch-Mode': 'cors',
           'Sec-Fetch-Site': 'same-site',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         },
-        cache: 'no-store', // Disable caching - responses are too large (3MB+)
+        next: { revalidate: 0 }, // Next.js specific: don't cache
       });
 
       if (!res.ok) {
         const errorBody = await res.text();
         console.error(`SofaScore API error: ${res.status} ${res.statusText}`, errorBody);
         
-        // If 403 challenge and we have retries left, wait and try again
+        // If 403 challenge and we have retries left, wait longer and try again
         if (res.status === 403 && i < retries - 1) {
-          const delay = Math.pow(2, i) * 1000; // Exponential backoff: 1s, 2s, 4s
-          console.log(`Retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
-          await sleep(delay);
-          continue;
+          continue; // Retry loop will handle backoff
         }
         
         throw new Error(`SofaScore API error: ${res.status} ${res.statusText}`);
@@ -71,10 +84,7 @@ async function apiRequest(endpoint: string, retries = 3) {
     } catch (error) {
       // If network error and we have retries left, try again
       if (i < retries - 1) {
-        const delay = Math.pow(2, i) * 1000;
-        console.log(`Network error, retrying in ${delay}ms... (attempt ${i + 1}/${retries})`);
-        await sleep(delay);
-        continue;
+        continue; // Retry loop will handle backoff
       }
       throw error;
     }
@@ -247,6 +257,8 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
 
 /**
  * Get the current season year string.
+/**
+ * Get the current season year string.
  */
 export function getCurrentSeason(): string {
   const now = new Date();
@@ -257,4 +269,30 @@ export function getCurrentSeason(): string {
     return `${year}-${String(year + 1).slice(-2)}`;
   }
   return `${year - 1}-${String(year).slice(-2)}`;
+}
+
+/**
+ * Fetch team form (last 5 matches)
+ */
+export async function fetchTeamForm(teamId: number): Promise<any[]> {
+  try {
+    const data = await apiRequest(`/team/${teamId}/events/last/0`);
+    return (data.events || []).slice(0, 5);
+  } catch (error) {
+    console.error(`Error fetching form for team ${teamId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Fetch betting odds for a fixture
+ */
+export async function fetchFixtureOdds(fixtureId: number): Promise<any> {
+  try {
+    const data = await apiRequest(`/event/${fixtureId}/odds/1/all`);
+    return data;
+  } catch (error) {
+    console.error(`Error fetching odds for fixture ${fixtureId}:`, error);
+    return null;
+  }
 }

@@ -10,18 +10,20 @@ import { formatDate } from '@/lib/utils';
 
 export default function HomePage() {
   const [week, setWeek] = useState<Week | null>(null);
+  const [currentWeekNumber, setCurrentWeekNumber] = useState<number | null>(null);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Loading fixtures...');
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, 1 = next week, etc.
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (offset: number = 0) => {
     try {
-      setLoadingMessage('Fetching fixtures from SofaScore...');
-      // Fetch fixtures (will create week if needed)
-      const fixturesRes = await fetch('/api/fixtures');
+      setLoadingMessage('Loading fixtures...');
+      // Use POST to ensure we get fresh filtered data
+      const fixturesRes = await fetch(`/api/fixtures?weekOffset=${offset}`, { method: 'POST' });
       const fixturesData = await fixturesRes.json();
 
       if (fixturesData.error) {
@@ -34,6 +36,11 @@ export default function HomePage() {
       
       setWeek(fixturesData.week);
       setFixtures(fixturesData.fixtures || []);
+      
+      // Store current week number on first load
+      if (currentWeekNumber === null && offset === 0) {
+        setCurrentWeekNumber(fixturesData.week?.week_number || null);
+      }
 
       // Fetch selections for this week
       if (fixturesData.week) {
@@ -49,18 +56,28 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentWeekNumber]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(weekOffset);
+  }, [fetchData, weekOffset]);
+
+  const handlePreviousWeek = () => {
+    if (weekOffset > 0) {
+      setWeekOffset(prev => prev - 1);
+    }
+  };
+
+  const handleNextWeek = () => {
+    setWeekOffset(prev => prev + 1);
+  };
 
   const handleRefreshFixtures = async () => {
     setRefreshing(true);
     setError(null);
     setLoadingMessage('Refreshing fixtures from API...');
     try {
-      const res = await fetch('/api/fixtures', { method: 'POST' });
+      const res = await fetch(`/api/fixtures?weekOffset=${weekOffset}`, { method: 'POST' });
       const data = await res.json();
       
       if (!res.ok) {
@@ -134,9 +151,26 @@ export default function HomePage() {
       <div className="card">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-white">
-              ⚽ Week {week?.week_number || '?'}
-            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePreviousWeek}
+                disabled={weekOffset === 0}
+                className="text-xl disabled:opacity-30 disabled:cursor-not-allowed hover:scale-110 transition-transform"
+                title="Previous week"
+              >
+                ◀️
+              </button>
+              <h1 className="text-xl font-bold text-white">
+                ⚽ Week {week?.week_number || '?'}
+              </h1>
+              <button
+                onClick={handleNextWeek}
+                className="text-xl hover:scale-110 transition-transform"
+                title="Next week"
+              >
+                ▶️
+              </button>
+            </div>
             <button
               onClick={handleRefreshFixtures}
               disabled={refreshing}

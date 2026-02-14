@@ -11,7 +11,10 @@ import { LEAGUE_IDS } from '@/types';
  */
 export async function GET(request: NextRequest) {
   try {
-    const saturdayDate = getRelevantSaturday();
+    const { searchParams } = new URL(request.url);
+    const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
+    
+    const saturdayDate = getRelevantSaturday(weekOffset);
 
     // Get or create the week
     let { data: week, error: weekError } = await supabase
@@ -77,16 +80,45 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const saturdayDate = getRelevantSaturday();
+    const { searchParams } = new URL(request.url);
+    const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
+    
+    const saturdayDate = getRelevantSaturday(weekOffset);
 
-    const { data: week } = await supabase
+    // Get or create the week
+    let { data: week, error: weekError } = await supabase
       .from('weeks')
       .select('*')
       .eq('saturday_date', saturdayDate)
       .single();
 
+    if (weekError && weekError.code !== 'PGRST116') {
+      return NextResponse.json({ error: weekError.message }, { status: 500 });
+    }
+
     if (!week) {
-      return NextResponse.json({ error: 'No active week found' }, { status: 404 });
+      // Create the week if it doesn't exist
+      const season = getCurrentSeason();
+      const weekNumber = calculateWeekNumber(saturdayDate);
+
+      const { data: newWeek, error: createError } = await supabase
+        .from('weeks')
+        .upsert({
+          week_number: weekNumber,
+          season: season,
+          saturday_date: saturdayDate,
+          status: 'active',
+        }, {
+          onConflict: 'saturday_date',
+          ignoreDuplicates: false
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        return NextResponse.json({ error: createError.message }, { status: 500 });
+      }
+      week = newWeek;
     }
 
     // Check for existing fixtures and rate limit
@@ -120,6 +152,8 @@ export async function POST(request: NextRequest) {
       week_id: week.id,
       home_team: f.teams.home.name,
       away_team: f.teams.away.name,
+      home_team_id: f.teams.home.id,
+      away_team_id: f.teams.away.id,
       home_team_logo: f.teams.home.logo,
       away_team_logo: f.teams.away.logo,
       league_name: LEAGUE_IDS[f.league.id as keyof typeof LEAGUE_IDS] || f.league.name,

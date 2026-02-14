@@ -67,16 +67,19 @@ export async function GET(request: NextRequest) {
         return {
           id: event.id,
           homeTeam: event.homeTeam?.name || 'Unknown',
+          homeTeamId: event.homeTeam?.id || 0,
           awayTeam: event.awayTeam?.name || 'Unknown',
+          awayTeamId: event.awayTeam?.id || 0,
           kickOff: kickOff.toISOString(),
           kickOffTime: ukTime,
           league: event.tournament?.uniqueTournament?.name || 'Unknown League',
           leagueId: event.tournament?.uniqueTournament?.id || 0,
           tournament: event.tournament?.name || 'Unknown Tournament',
           is3pm: ukTime === '15:00',
+          status: event.status?.type || 'notstarted',
         };
       })
-      .filter((f: any) => f.is3pm);
+      .filter((f: any) => f.is3pm && f.status !== 'postponed');
 
     console.log(`Found ${fixtures.length} fixtures at 15:00${showAll ? ' from all leagues' : ' from target leagues'}`);
 
