@@ -1,5 +1,4 @@
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+import chromium from 'chrome-aws-lambda';
 
 // Cache the browser instance to reuse across requests
 let browserInstance: any = null;
@@ -11,31 +10,21 @@ async function getBrowser() {
 
   console.log('Launching Chromium browser...');
   
-  // Check if we're in production (Vercel) or local
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  if (isProduction) {
-    // Use @sparticuz/chromium for Vercel serverless
-    browserInstance = await puppeteer.launch({
+  try {
+    browserInstance = await chromium.puppeteer.launch({
       args: chromium.args,
-      defaultViewport: {
-        width: 1920,
-        height: 1080,
-      },
-      executablePath: await chromium.executablePath(),
-      headless: true,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
-  } else {
-    // Use local Chrome for development
-    browserInstance = await puppeteer.launch({
-      headless: true,
-      executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-  }
 
-  console.log('Browser launched successfully');
-  return browserInstance;
+    console.log('Browser launched successfully');
+    return browserInstance;
+  } catch (error) {
+    console.error('Failed to launch browser:', error);
+    throw error;
+  }
 }
 
 export async function browserApiRequest(url: string, retries = 3): Promise<any> {
