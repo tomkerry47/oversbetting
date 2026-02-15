@@ -1,4 +1,5 @@
 import chromium from 'chrome-aws-lambda';
+import puppeteer from 'puppeteer-core';
 
 // Cache the browser instance to reuse across requests
 let browserInstance: any = null;
@@ -9,13 +10,20 @@ async function getBrowser() {
   }
 
   console.log('Launching Chromium browser...');
+  console.log('Environment:', process.env.NODE_ENV);
+  console.log('AWS_EXECUTION_ENV:', process.env.AWS_EXECUTION_ENV);
+  console.log('AWS_LAMBDA_FUNCTION_NAME:', process.env.AWS_LAMBDA_FUNCTION_NAME);
   
   try {
-    browserInstance = await chromium.puppeteer.launch({
-      args: chromium.args,
+    // Get the executable path - chrome-aws-lambda will download if needed
+    const executablePath = await chromium.executablePath;
+    console.log('Chrome executable path:', executablePath);
+
+    browserInstance = await puppeteer.launch({
+      args: [...chromium.args, '--disable-dev-shm-usage', '--no-sandbox'],
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
+      executablePath,
+      headless: true,
       ignoreHTTPSErrors: true,
     });
 

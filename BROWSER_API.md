@@ -4,13 +4,13 @@
 SofaScore API returns 403 errors when detecting automated requests from serverless functions.
 
 ## Solution
-This implementation uses Puppeteer with a real Chromium browser to make API requests, making them indistinguishable from real user traffic.
+This implementation uses Puppeteer with chrome-aws-lambda to make API requests through a real Chromium browser, making them indistinguishable from real user traffic.
 
 ## Setup
 
 ### Local Development
-1. Ensure Google Chrome is installed at `/Applications/Google Chrome.app`
-2. Set environment variable: `USE_BROWSER_API=false` (use regular fetch for dev)
+1. No additional setup needed - uses chrome-aws-lambda's bundled Chromium
+2. Set environment variable: `USE_BROWSER_API=false` (use regular fetch for dev speed)
 
 ### Production (Vercel)
 1. Add environment variable in Vercel dashboard:
@@ -18,7 +18,7 @@ This implementation uses Puppeteer with a real Chromium browser to make API requ
    USE_BROWSER_API=true
    ```
 
-2. The app will automatically use `@sparticuz/chromium` which is optimized for serverless
+2. The app will automatically use `chrome-aws-lambda` which includes an optimized Chromium binary for AWS Lambda (works on Vercel)
 
 ## How It Works
 

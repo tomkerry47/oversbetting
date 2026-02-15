@@ -1,17 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // Ignore source map files from chrome-aws-lambda
     config.module.rules.push({
       test: /\.js\.map$/,
       use: 'ignore-loader',
     });
     
-    // Exclude chrome-aws-lambda from being processed
-    config.externals = config.externals || [];
-    config.externals.push({
-      'chrome-aws-lambda': 'chrome-aws-lambda',
-    });
+    // Don't bundle chrome-aws-lambda on server side - it needs to be in node_modules
+    if (isServer) {
+      config.externals = config.externals || [];
+      if (Array.isArray(config.externals)) {
+        config.externals.push('chrome-aws-lambda');
+      }
+    }
     
     return config;
   },
