@@ -1,7 +1,11 @@
 import { APIFixture } from '@/types';
+import { browserApiRequest } from './browser-api';
 
 // Using SofaScore unofficial API (free, no key needed)
 const API_BASE = 'https://api.sofascore.com/api/v1';
+
+// Flag to enable browser-based requests (slower but bypasses 403)
+const USE_BROWSER = process.env.USE_BROWSER_API === 'true';
 
 // SofaScore tournament IDs for our leagues
 const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
@@ -27,7 +31,17 @@ async function sleep(ms: number) {
 
 async function apiRequest(endpoint: string, retries = 3) {
   const url = `${API_BASE}${endpoint}`;
-  console.log(`SofaScore API request: ${url}`);
+  console.log(`SofaScore API request: ${url} (browser: ${USE_BROWSER})`);
+
+  // If browser mode is enabled, use Chromium-based requests
+  if (USE_BROWSER) {
+    try {
+      return await browserApiRequest(url, retries);
+    } catch (error) {
+      console.error('Browser request failed, falling back to fetch:', error);
+      // Fall through to regular fetch as fallback
+    }
+  }
 
   for (let i = 0; i < retries; i++) {
     try {
