@@ -1,11 +1,20 @@
 import { APIFixture } from '@/types';
-import { browserApiRequest } from './browser-api';
 
 // Using SofaScore unofficial API (free, no key needed)
 const API_BASE = 'https://api.sofascore.com/api/v1';
 
-// Flag to enable browser-based requests (slower but bypasses 403)
-const USE_BROWSER = process.env.USE_BROWSER_API === 'true';
+// Rotating user agents to appear more human
+const USER_AGENTS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+];
+
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
 
 // SofaScore tournament IDs for our leagues
 const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
@@ -31,24 +40,18 @@ async function sleep(ms: number) {
 
 async function apiRequest(endpoint: string, retries = 3) {
   const url = `${API_BASE}${endpoint}`;
-  console.log(`SofaScore API request: ${url} (browser: ${USE_BROWSER})`);
-
-  // If browser mode is enabled, use Chromium-based requests
-  if (USE_BROWSER) {
-    try {
-      return await browserApiRequest(url, retries);
-    } catch (error) {
-      console.error('Browser request failed, falling back to fetch:', error);
-      // Fall through to regular fetch as fallback
-    }
-  }
-
+  
   for (let i = 0; i < retries; i++) {
     try {
-      // Add small random delay before each request to avoid rate limiting
-      if (i > 0) {
-        const jitter = Math.random() * 500; // 0-500ms random jitter
-        const delay = Math.pow(2, i) * 1000 + jitter; // Exponential backoff with jitter
+      // Add increasing delays between attempts (including first request)
+      const baseDelay = i === 0 ? 1000 : Math.pow(2, i) * 1000; // Start with 1s, then exponential
+      const jitter = Math.random() * 1000; // 0-1000ms jitter
+      const delay = baseDelay + jitter;
+      
+      if (i === 0) {
+        console.log(`SofaScore API request (waiting ${Math.round(delay)}ms first): ${url}`);
+        await sleep(delay);
+      } else {
         console.log(`Retrying in ${Math.round(delay)}ms... (attempt ${i + 1}/${retries})`);
         await sleep(delay);
       }
@@ -71,7 +74,7 @@ async function apiRequest(endpoint: string, retries = 3) {
           'Sec-Fetch-Dest': 'empty',
           'Sec-Fetch-Mode': 'cors',
           'Sec-Fetch-Site': 'same-site',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': getRandomUserAgent(), // Rotate user agents
         },
         next: { revalidate: 0 }, // Next.js specific: don't cache
       });
@@ -218,9 +221,9 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
   for (let i = 0; i < fixtureIds.length; i++) {
     const fixtureId = fixtureIds[i];
     
-    // Add delay between requests (except first one) to avoid triggering anti-bot
+    // Add longer delays between fixture requests (2-4 seconds)
     if (i > 0) {
-      const delay = 500 + Math.random() * 500; // 500-1000ms random delay
+      const delay = 2000 + Math.random() * 2000; // 2-4 seconds
       console.log(`[fetchFixtureResults] Waiting ${Math.round(delay)}ms before next request...`);
       await sleep(delay);
     }
