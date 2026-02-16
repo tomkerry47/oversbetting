@@ -1,3 +1,4 @@
+import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 
 // Cache the browser instance to reuse across requests
@@ -8,7 +9,6 @@ type ChromiumConfig = {
   args: string[];
   defaultViewport: { width: number; height: number } | null;
   headless: boolean;
-  provider: string;
 };
 
 function normalizeViewport(input: any): { width: number; height: number } | null {
@@ -22,66 +22,18 @@ function normalizeViewport(input: any): { width: number; height: number } | null
   return null;
 }
 
-function normalizeHeadless(input: any): boolean {
-  if (typeof input === 'boolean') return input;
-  if (input === 'new') return true;
-  return true;
-}
-
-async function dynamicImport(moduleName: string): Promise<any> {
-  const importer = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
-  return importer(moduleName);
-}
-
 async function resolveChromiumConfig(): Promise<ChromiumConfig> {
-  // Preferred path for Vercel/serverless runtimes.
-  try {
-    const sparticuzModule = await dynamicImport('@sparticuz/chromium');
-    const sparticuz = sparticuzModule.default || sparticuzModule;
-    const executablePath = await sparticuz.executablePath();
-    if (executablePath) {
-      return {
-        executablePath,
-        args: sparticuz.args || [],
-        defaultViewport: normalizeViewport(sparticuz.defaultViewport),
-        headless: normalizeHeadless(sparticuz.headless),
-        provider: '@sparticuz/chromium',
-      };
-    }
-  } catch (error) {
-    console.warn('Could not load @sparticuz/chromium, trying chrome-aws-lambda fallback.');
+  const executablePath = await chromium.executablePath();
+  if (!executablePath) {
+    throw new Error('No Chromium executable found from @sparticuz/chromium.');
   }
 
-  // Fallback path for older local/serverless setups.
-  if (process.env.VERCEL) {
-    process.env.AWS_EXECUTION_ENV = process.env.AWS_EXECUTION_ENV || 'AWS_Lambda_nodejs18.x';
-    process.env.AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || 'vercel-function';
-  }
-
-  try {
-    const legacyModule = await dynamicImport('chrome-aws-lambda');
-    const legacyChromium = legacyModule.default || legacyModule;
-    const executablePath =
-      typeof legacyChromium.executablePath === 'function'
-        ? await legacyChromium.executablePath()
-        : await legacyChromium.executablePath;
-
-    if (executablePath) {
-      return {
-        executablePath,
-        args: legacyChromium.args || [],
-        defaultViewport: normalizeViewport(legacyChromium.defaultViewport),
-        headless: true,
-        provider: 'chrome-aws-lambda',
-      };
-    }
-  } catch (error) {
-    console.warn('Could not load chrome-aws-lambda fallback.');
-  }
-
-  throw new Error(
-    'No Chromium executable found. Install @sparticuz/chromium for Vercel serverless runtime.'
-  );
+  return {
+    executablePath,
+    args: chromium.args || [],
+    defaultViewport: normalizeViewport(chromium.defaultViewport),
+    headless: true,
+  };
 }
 
 async function getBrowser() {
@@ -96,7 +48,6 @@ async function getBrowser() {
   
   try {
     const chromiumConfig = await resolveChromiumConfig();
-    console.log('Chromium provider:', chromiumConfig.provider);
     console.log('Chrome executable path:', chromiumConfig.executablePath);
 
     browserInstance = await puppeteer.launch({
