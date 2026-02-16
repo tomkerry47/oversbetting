@@ -8,7 +8,7 @@ I've implemented a Chromium-based solution to bypass SofaScore's 403 errors by u
 
 1. **New Dependencies**:
    - `puppeteer-core@10.1.0` - Browser automation library  
-   - `chrome-aws-lambda@10.1.0` - Serverless-optimized Chromium binary (works on Vercel/AWS Lambda)
+   - `@sparticuz/chromium` - Serverless-optimized Chromium binary (works on Vercel/AWS Lambda)
    - `ignore-loader` - Webpack loader to handle source maps
 
 2. **New Files**:
@@ -17,7 +17,7 @@ I've implemented a Chromium-based solution to bypass SofaScore's 403 errors by u
 
 3. **Updated Files**:
    - [src/lib/football-api.ts](src/lib/football-api.ts) - Now supports browser mode via env variable
-   - [next.config.js](next.config.js) - Webpack config to handle chrome-aws-lambda
+   - [next.config.js](next.config.js) - Webpack config to handle Chromium serverless packages
    - [.env.local](.env.local) - Added `USE_BROWSER_API=false` (for local dev)
    - [.env.local.example](.env.local.example) - Added example config
 
@@ -92,13 +92,13 @@ After deployment, check Vercel logs:
 ## 🔧 Troubleshooting
 
 **If build fails:**
-- Check that puppeteer-core and chrome-aws-lambda are in `dependencies` (not devDependencies) ✅ Already correct
+- Check that `puppeteer-core` and `@sparticuz/chromium` are in `dependencies` (not devDependencies)
 - Ensure ignore-loader is in devDependencies for webpack config
 
 **If you get Chrome errors locally:**
 - Keep `USE_BROWSER_API=false` for local development
 - Only enable browser mode in production where it's needed
-- chrome-aws-lambda bundles its own Chromium, no local Chrome needed
+- `@sparticuz/chromium` provides the Chromium binary for serverless runtimes; local browser install is not required for production
 
 **If still getting 403s in production:**
 - Verify `USE_BROWSER_API=true` is set in Vercel
