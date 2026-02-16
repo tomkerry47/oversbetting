@@ -4,12 +4,22 @@ import puppeteer from 'puppeteer-core';
 // Cache the browser instance to reuse across requests
 let browserInstance: any = null;
 
+function prepareServerlessChromiumEnv() {
+  // chrome-aws-lambda uses Lambda env detection to decide whether to expose a Chromium binary path.
+  // Vercel functions are Lambda-like but may not set these vars consistently.
+  if (process.env.VERCEL) {
+    process.env.AWS_EXECUTION_ENV = process.env.AWS_EXECUTION_ENV || 'AWS_Lambda_nodejs18.x';
+    process.env.AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || 'vercel-function';
+  }
+}
+
 async function getBrowser() {
   if (browserInstance) {
     return browserInstance;
   }
 
   console.log('Launching Chromium browser...');
+  prepareServerlessChromiumEnv();
   console.log('Environment:', process.env.NODE_ENV);
   console.log('AWS_EXECUTION_ENV:', process.env.AWS_EXECUTION_ENV);
   console.log('AWS_LAMBDA_FUNCTION_NAME:', process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -18,6 +28,11 @@ async function getBrowser() {
     // Get the executable path - chrome-aws-lambda will download if needed
     const executablePath = await chromium.executablePath;
     console.log('Chrome executable path:', executablePath);
+    if (!executablePath) {
+      throw new Error(
+        'Chromium executable path is null. Ensure chrome-aws-lambda is available in this runtime.'
+      );
+    }
 
     browserInstance = await puppeteer.launch({
       args: [...chromium.args, '--disable-dev-shm-usage', '--no-sandbox'],
@@ -74,10 +89,7 @@ export async function browserApiRequest(url: string, retries = 3): Promise<any> 
         throw new Error('No response from page.goto');
       }
 
-      // Get the JSON response from the page
-      const content = await page.content();
-      
-      // Check if it's a JSON response (API endpoint)
+      // Read JSON response body from the API endpoint.
       const text = await response.text();
       const data = JSON.parse(text);
 
