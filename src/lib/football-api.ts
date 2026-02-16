@@ -40,6 +40,13 @@ async function sleep(ms: number) {
 
 async function apiRequest(endpoint: string, retries = 3) {
   const url = `${API_BASE}${endpoint}`;
+  const useBrowserApi = process.env.USE_BROWSER_API === 'true';
+
+  if (useBrowserApi) {
+    console.log(`SofaScore API request: ${url} (browser: true)`);
+    const { browserApiRequest } = await import('./browser-api');
+    return browserApiRequest(url, retries);
+  }
   
   for (let i = 0; i < retries; i++) {
     try {
