@@ -6,10 +6,21 @@ let browserInstance: any = null;
 type ChromiumConfig = {
   executablePath: string;
   args: string[];
-  defaultViewport: Record<string, any> | null;
+  defaultViewport: { width: number; height: number } | null;
   headless: boolean | 'new';
   provider: string;
 };
+
+function normalizeViewport(input: any): { width: number; height: number } | null {
+  if (
+    input &&
+    typeof input.width === 'number' &&
+    typeof input.height === 'number'
+  ) {
+    return { width: input.width, height: input.height };
+  }
+  return null;
+}
 
 async function dynamicImport(moduleName: string): Promise<any> {
   const importer = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
@@ -26,7 +37,7 @@ async function resolveChromiumConfig(): Promise<ChromiumConfig> {
       return {
         executablePath,
         args: sparticuz.args || [],
-        defaultViewport: sparticuz.defaultViewport || null,
+        defaultViewport: normalizeViewport(sparticuz.defaultViewport),
         headless: sparticuz.headless ?? true,
         provider: '@sparticuz/chromium',
       };
@@ -53,7 +64,7 @@ async function resolveChromiumConfig(): Promise<ChromiumConfig> {
       return {
         executablePath,
         args: legacyChromium.args || [],
-        defaultViewport: legacyChromium.defaultViewport || null,
+        defaultViewport: normalizeViewport(legacyChromium.defaultViewport),
         headless: true,
         provider: 'chrome-aws-lambda',
       };
