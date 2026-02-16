@@ -1,0 +1,33 @@
+name: Fetch Next Week Fixtures
+
+on:
+  workflow_dispatch:
+    inputs:
+      week_offset:
+        description: "Week offset from current UK week (0=current, 1=next)"
+        required: true
+        default: "1"
+
+jobs:
+  sync-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch and upsert fixtures
+        run: node scripts/fetch-fixtures-to-supabase.mjs --weekOffset=${{ github.event.inputs.week_offset }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
