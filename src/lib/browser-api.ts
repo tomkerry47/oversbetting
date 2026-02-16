@@ -7,7 +7,7 @@ type ChromiumConfig = {
   executablePath: string;
   args: string[];
   defaultViewport: { width: number; height: number } | null;
-  headless: boolean | 'new';
+  headless: boolean;
   provider: string;
 };
 
@@ -20,6 +20,12 @@ function normalizeViewport(input: any): { width: number; height: number } | null
     return { width: input.width, height: input.height };
   }
   return null;
+}
+
+function normalizeHeadless(input: any): boolean {
+  if (typeof input === 'boolean') return input;
+  if (input === 'new') return true;
+  return true;
 }
 
 async function dynamicImport(moduleName: string): Promise<any> {
@@ -38,7 +44,7 @@ async function resolveChromiumConfig(): Promise<ChromiumConfig> {
         executablePath,
         args: sparticuz.args || [],
         defaultViewport: normalizeViewport(sparticuz.defaultViewport),
-        headless: sparticuz.headless ?? true,
+        headless: normalizeHeadless(sparticuz.headless),
         provider: '@sparticuz/chromium',
       };
     }
