@@ -144,7 +144,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
   const webhookUrl = process.env.SELECTIONS_COMPLETE_WEBHOOK_URL;
   
   if (!webhookUrl) {
-    console.log('No webhook URL configured');
+    console.log('No webhook URL configured (SELECTIONS_COMPLETE_WEBHOOK_URL missing)');
     return;
   }
 
@@ -170,12 +170,13 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
         acc[sel.player_name].push({
           home_team: sel.fixture.home_team,
           away_team: sel.fixture.away_team,
-          kick_off: sel.fixture.kick_off_time,
+          kick_off: sel.fixture.kick_off,
         });
         return acc;
       }, {}),
     };
 
+    console.log(`Triggering selections webhook for week ${weekId} with ${selections.length} selections`);
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
@@ -187,7 +188,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
     if (!response.ok) {
       console.error('Webhook failed:', response.status, await response.text());
     } else {
-      console.log('Webhook triggered successfully');
+      console.log('Webhook triggered successfully:', response.status);
     }
   } catch (error) {
     console.error('Error triggering webhook:', error);

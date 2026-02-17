@@ -393,50 +393,48 @@ export default function FixtureSelector({
 
                           {isExpanded && details && (
                             <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
-                              <div>
-                                <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
-                                <div className="space-y-2">
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-1">{fixture.home_team}</div>
-                                    <div className="flex gap-1 mb-1">
-                                      {details.homeForm.map((match, idx) => (
-                                        <div
-                                          key={idx}
-                                          className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
-                                            ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
-                                        >
-                                          {match.result}
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      {details.homeForm.map((match, idx) => (
-                                        <div key={idx} className="text-[9px] text-slate-400">
-                                          {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
-                                        </div>
-                                      ))}
-                                    </div>
+                              <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
+                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">{fixture.home_team}</div>
+                                  <div className="flex gap-1 mb-1">
+                                    {details.homeForm.map((match, idx) => (
+                                      <div
+                                        key={idx}
+                                        className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
+                                          ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
+                                      >
+                                        {match.result}
+                                      </div>
+                                    ))}
                                   </div>
-                                  <div>
-                                    <div className="text-[10px] text-slate-400 mb-1">{fixture.away_team}</div>
-                                    <div className="flex gap-1 mb-1">
-                                      {details.awayForm.map((match, idx) => (
-                                        <div
-                                          key={idx}
-                                          className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
-                                            ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
-                                        >
-                                          {match.result}
-                                        </div>
-                                      ))}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      {details.awayForm.map((match, idx) => (
-                                        <div key={idx} className="text-[9px] text-slate-400">
-                                          {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
-                                        </div>
-                                      ))}
-                                    </div>
+                                  <div className="space-y-0.5">
+                                    {details.homeForm.map((match, idx) => (
+                                      <div key={idx} className="text-[9px] text-slate-400">
+                                        {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
+                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">{fixture.away_team}</div>
+                                  <div className="flex gap-1 mb-1">
+                                    {details.awayForm.map((match, idx) => (
+                                      <div
+                                        key={idx}
+                                        className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
+                                          ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
+                                      >
+                                        {match.result}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {details.awayForm.map((match, idx) => (
+                                      <div key={idx} className="text-[9px] text-slate-400">
+                                        {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
                               </div>
