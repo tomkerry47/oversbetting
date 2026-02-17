@@ -11,6 +11,7 @@ export default function HistoryPage() {
   >({});
   const [loading, setLoading] = useState(true);
   const [checkingResults, setCheckingResults] = useState<number | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchWeeks = async () => {
@@ -52,6 +53,7 @@ export default function HistoryPage() {
   const handleCheckResults = async (weekId: number, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card collapse
     setCheckingResults(weekId);
+    setCheckError(null);
     
     try {
       const res = await fetch('/api/results/trigger', {
@@ -59,6 +61,7 @@ export default function HistoryPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ week_id: weekId }),
       });
+      const triggerData = await res.json().catch(() => ({}));
       if (res.ok) {
         // Poll week details for up to ~60s to catch workflow completion.
         for (let i = 0; i < 12; i++) {
@@ -79,9 +82,11 @@ export default function HistoryPage() {
             );
           }
         }
+      } else {
+        setCheckError(triggerData.error || 'Failed to trigger results workflow');
       }
     } catch {
-      // ignore
+      setCheckError('Network error while triggering results workflow');
     } finally {
       setCheckingResults(null);
     }
@@ -113,6 +118,9 @@ export default function HistoryPage() {
         <p className="text-slate-400 text-xs mt-1">
           {weeks.length} completed week{weeks.length !== 1 ? 's' : ''}
         </p>
+        {checkError && (
+          <p className="text-red-400 text-xs mt-2">❌ {checkError}</p>
+        )}
       </div>
 
       {weeks.length === 0 ? (

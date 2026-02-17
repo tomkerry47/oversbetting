@@ -20,12 +20,15 @@ export async function POST(request: NextRequest) {
     const ref = process.env.GITHUB_FIXTURES_WORKFLOW_REF || 'main';
 
     if (!token || !owner || !repo) {
+      const missing: string[] = [];
+      if (!token) missing.push('GITHUB_ACTIONS_TRIGGER_TOKEN');
+      if (!owner) missing.push('GITHUB_REPO_OWNER (or VERCEL_GIT_REPO_OWNER)');
+      if (!repo) missing.push('GITHUB_REPO_NAME (or VERCEL_GIT_REPO_SLUG)');
       return NextResponse.json(
         {
-          error:
-            'Missing GitHub trigger configuration. Set GITHUB_ACTIONS_TRIGGER_TOKEN and repo owner/name (or rely on VERCEL_GIT_REPO_OWNER/VERCEL_GIT_REPO_SLUG).',
+          error: `Missing GitHub trigger configuration: ${missing.join(', ')}`,
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
 
