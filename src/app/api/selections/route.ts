@@ -168,6 +168,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
           acc[sel.player_name] = [];
         }
         acc[sel.player_name].push({
+          fixture: `${sel.fixture.is_star_pick ? '⭐ ' : ''}${sel.fixture.home_team} vs ${sel.fixture.away_team}`,
           home_team: sel.fixture.home_team,
           away_team: sel.fixture.away_team,
           kick_off: sel.fixture.kick_off,
