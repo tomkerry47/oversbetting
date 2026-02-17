@@ -17,17 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: "20"
-          cache: "npm"
+          python-version: "3.11"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements-tls.txt
 
       - name: Fetch and upsert fixtures
-        run: node scripts/fetch-fixtures-to-supabase.mjs --weekOffset=${{ github.event.inputs.week_offset }}
+        run: python scripts/fetch-fixtures-tls.py --weekOffset=${{ github.event.inputs.week_offset }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
