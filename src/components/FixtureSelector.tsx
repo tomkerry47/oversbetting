@@ -49,6 +49,16 @@ export default function FixtureSelector({
   const [expandedFixture, setExpandedFixture] = useState<number | null>(null);
   const [fixtureDetails, setFixtureDetails] = useState<Record<number, FixtureDetails>>({});
 
+  const formatKickoffTime = (isoDate: string): string => {
+    const date = new Date(isoDate);
+    return date.toLocaleTimeString('en-GB', {
+      timeZone: 'Europe/London',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  };
+
   // Group fixtures by league
   const groupedFixtures = fixtures.reduce<Record<string, Fixture[]>>((acc, f) => {
     if (!acc[f.league_name]) acc[f.league_name] = [];
@@ -115,6 +125,26 @@ export default function FixtureSelector({
     }
 
     if (fixtureDetails[fixture.id]) {
+      setExpandedFixture(expandedFixture === fixture.id ? null : fixture.id);
+      return;
+    }
+
+    // Use cached form/odds from fixtures table when available.
+    if (fixture.home_form && fixture.away_form) {
+      setFixtureDetails(prev => ({
+        ...prev,
+        [fixture.id]: {
+          homeForm: fixture.home_form || [],
+          awayForm: fixture.away_form || [],
+          odds:
+            fixture.odds_over_25 || fixture.odds_under_25
+              ? {
+                  over: convertOddsToDecimal(fixture.odds_over_25 || 'N/A'),
+                  under: convertOddsToDecimal(fixture.odds_under_25 || 'N/A'),
+                }
+              : null,
+        },
+      }));
       setExpandedFixture(expandedFixture === fixture.id ? null : fixture.id);
       return;
     }
@@ -313,6 +343,14 @@ export default function FixtureSelector({
                                   <span className="text-slate-500 text-xs mr-1">vs</span>
                                   {fixture.away_team}
                                 </div>
+                                <div className="mt-1 text-[10px] text-slate-400 flex flex-wrap gap-x-2 gap-y-0.5">
+                                  <span>KO {formatKickoffTime(fixture.kick_off)}</span>
+                                  <span>
+                                    O/U 2.5:{' '}
+                                    {convertOddsToDecimal(fixture.odds_over_25 || 'N/A')} /{' '}
+                                    {convertOddsToDecimal(fixture.odds_under_25 || 'N/A')}
+                                  </span>
+                                </div>
                               </div>
                               {fixture.home_team_id && fixture.away_team_id && (
                                 <button
@@ -330,22 +368,6 @@ export default function FixtureSelector({
 
                           {isExpanded && details && (
                             <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
-                              {details.odds && (
-                                <div className="mb-3 bg-gradient-to-r from-amber-900/20 to-amber-800/20 border border-amber-700/50 rounded-lg p-2">
-                                  <h4 className="text-xs font-bold text-amber-400 mb-1.5">💰 O/U 2.5</h4>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-slate-800 rounded p-1.5 text-center">
-                                      <div className="text-[9px] uppercase text-slate-400">Over</div>
-                                      <div className="text-sm font-bold text-emerald-400">{details.odds.over}</div>
-                                    </div>
-                                    <div className="bg-slate-800 rounded p-1.5 text-center">
-                                      <div className="text-[9px] uppercase text-slate-400">Under</div>
-                                      <div className="text-sm font-bold text-sky-400">{details.odds.under}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
                               <div>
                                 <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
                                 <div className="space-y-2">
