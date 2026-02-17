@@ -234,6 +234,117 @@ def extract_over_under_odds(odds_payload: Dict[str, Any]) -> tuple[str | None, s
     return None, None
 
 
+def fractional_to_decimal(odds_value: Any) -> float | None:
+    if not odds_value:
+        return None
+
+    odds_text = str(odds_value).strip()
+    if not odds_text:
+        return None
+
+    try:
+        if "/" in odds_text:
+            numerator_text, denominator_text = odds_text.split("/", 1)
+            numerator = float(numerator_text)
+            denominator = float(denominator_text)
+            if denominator == 0:
+                return None
+            return (numerator / denominator) + 1.0
+        return float(odds_text)
+    except Exception:
+        return None
+
+
+def recent_goals_average(form_rows: List[Dict[str, Any]]) -> float | None:
+    if not form_rows:
+        return None
+
+    totals: List[float] = []
+    for match in form_rows:
+        home_score = match.get("homeScore")
+        away_score = match.get("awayScore")
+        if isinstance(home_score, (int, float)) and isinstance(away_score, (int, float)):
+            totals.append(float(home_score + away_score))
+
+    if not totals:
+        return None
+    return sum(totals) / len(totals)
+
+
+def _normalize(value: float | None, min_value: float | None, max_value: float | None, invert: bool = False) -> float:
+    # Unknown values get a neutral midpoint so they can still rank.
+    if value is None or min_value is None or max_value is None:
+        return 0.5
+    if max_value <= min_value:
+        return 1.0
+
+    normalized = (value - min_value) / (max_value - min_value)
+    if invert:
+        normalized = 1.0 - normalized
+    return max(0.0, min(1.0, normalized))
+
+
+def apply_star_rankings(rows: List[Dict[str, Any]]) -> None:
+    if not rows:
+        return
+
+    ranking_rows: List[Dict[str, Any]] = []
+    odds_values: List[float] = []
+    goals_values: List[float] = []
+
+    for row in rows:
+        odds_decimal = fractional_to_decimal(row.get("odds_over_25"))
+        home_avg_goals = recent_goals_average(row.get("home_form") or [])
+        away_avg_goals = recent_goals_average(row.get("away_form") or [])
+        team_goal_avgs = [v for v in (home_avg_goals, away_avg_goals) if v is not None]
+        combined_goals_avg = (sum(team_goal_avgs) / len(team_goal_avgs)) if team_goal_avgs else None
+
+        if odds_decimal is not None:
+            odds_values.append(odds_decimal)
+        if combined_goals_avg is not None:
+            goals_values.append(combined_goals_avg)
+
+        ranking_rows.append(
+            {
+                "row": row,
+                "odds_decimal": odds_decimal,
+                "goals_avg": combined_goals_avg,
+            }
+        )
+
+    odds_min = min(odds_values) if odds_values else None
+    odds_max = max(odds_values) if odds_values else None
+    goals_min = min(goals_values) if goals_values else None
+    goals_max = max(goals_values) if goals_values else None
+
+    for item in ranking_rows:
+        odds_score = _normalize(item["odds_decimal"], odds_min, odds_max, invert=True)
+        goals_score = _normalize(item["goals_avg"], goals_min, goals_max, invert=False)
+        # Favor lower over-2.5 odds slightly more, then recent goals trend.
+        score = (odds_score * 0.6) + (goals_score * 0.4)
+        item["score"] = score
+
+        row = item["row"]
+        row["is_star_pick"] = False
+        row["star_rank"] = None
+        row["star_score"] = round(score, 4)
+
+    ranking_rows.sort(
+        key=lambda item: (
+            item["score"],
+            item["goals_avg"] if item["goals_avg"] is not None else -1.0,
+            -(item["odds_decimal"] if item["odds_decimal"] is not None else 999.0),
+        ),
+        reverse=True,
+    )
+
+    star_count = min(5, len(ranking_rows))
+    for i in range(star_count):
+        row = ranking_rows[i]["row"]
+        row["is_star_pick"] = True
+        row["star_rank"] = i + 1
+
+
 def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None:
     fixture_id = row.get("api_fixture_id")
     home_team_id = row.get("home_team_id")
@@ -245,6 +356,9 @@ def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None
         row["away_form"] = []
         row["odds_over_25"] = None
         row["odds_under_25"] = None
+        row["is_star_pick"] = False
+        row["star_rank"] = None
+        row["star_score"] = None
         row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         return
 
@@ -357,8 +471,15 @@ def main() -> int:
             row["away_form"] = []
             row["odds_over_25"] = None
             row["odds_under_25"] = None
+            row["is_star_pick"] = False
+            row["star_rank"] = None
+            row["star_score"] = None
             row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
         time.sleep(0.4)
+
+    apply_star_rankings(fixture_rows)
+    star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
+    print(f"Calculated star picks: {len(star_rows)} / {len(fixture_rows)} fixtures")
 
     supabase = SupabaseRest(supabase_url, service_role)
     week = supabase.upsert_week(

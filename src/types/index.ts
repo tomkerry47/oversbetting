@@ -71,6 +71,9 @@ export interface Fixture {
   }> | null;
   odds_over_25: string | null;
   odds_under_25: string | null;
+  is_star_pick: boolean;
+  star_rank: number | null;
+  star_score: number | null;
   insights_updated_at: string | null;
   created_at: string;
 }

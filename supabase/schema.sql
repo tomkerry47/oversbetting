@@ -35,11 +35,15 @@ CREATE TABLE fixtures (
   home_score      INT,
   away_score      INT,
   match_status    TEXT NOT NULL DEFAULT 'NS',
+  is_star_pick    BOOLEAN NOT NULL DEFAULT FALSE,
+  star_rank       INT,
+  star_score      DOUBLE PRECISION,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_fixtures_week ON fixtures(week_id);
 CREATE INDEX idx_fixtures_api_id ON fixtures(api_fixture_id);
+CREATE INDEX idx_fixtures_week_star_pick ON fixtures(week_id, is_star_pick);
 
 -- ============================================================
 -- SELECTIONS: Each player's 2 picks per week
