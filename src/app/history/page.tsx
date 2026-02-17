@@ -197,8 +197,8 @@ export default function HistoryPage() {
                                 className="flex items-center justify-between text-xs"
                               >
                                 <span className="text-slate-300 truncate mr-2">
-                                  {sel.fixture?.is_star_pick ? '⭐ ' : ''}
                                   {getResultEmoji(sel.result)}{' '}
+                                  {sel.fixture?.is_star_pick ? '⭐ ' : ''}
                                   {sel.fixture?.home_team} vs{' '}
                                   {sel.fixture?.away_team}
                                 </span>

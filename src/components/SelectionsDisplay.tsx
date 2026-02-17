@@ -89,11 +89,6 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
                         <span className="text-slate-500 text-[9px] mr-0.5">vs</span>
                         {sel.fixture?.away_team}
                       </div>
-                      {sel.fixture?.is_star_pick && (
-                        <div className="text-[9px] text-amber-300 mt-0.5">
-                          Star Pick{sel.fixture?.star_rank ? ` #${sel.fixture.star_rank}` : ''}
-                        </div>
-                      )}
                       {sel.fixture?.home_score !== null &&
                         sel.fixture?.away_score !== null && (
                           <div className="text-amber-400 font-bold mt-0.5 text-[10px]">
