@@ -76,7 +76,7 @@ export default function HomePage() {
     setError(null);
     setLoadingMessage('Triggering fixture sync job...');
     try {
-      const targetWeekOffset = Math.max(1, weekOffset);
+      const targetWeekOffset = Math.max(0, weekOffset);
       const triggerRes = await fetch('/api/fixtures/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
