@@ -152,10 +152,29 @@ def main() -> int:
     week_id = week["id"]
     print(f"[Results] Processing week {week_id} ({week['saturday_date']})")
 
-    fixtures = db.get("fixtures", {"week_id": f"eq.{week_id}", "select": "*"})
+    selections = db.get("selections", {"week_id": f"eq.{week_id}", "select": "*"})
+    if not selections:
+        print("[Results] No selections to process")
+        return 0
+    print(f"[Results] Found {len(selections)} selections")
+
+    selected_fixture_ids = sorted({int(sel["fixture_id"]) for sel in selections if sel.get("fixture_id") is not None})
+    if not selected_fixture_ids:
+        print("[Results] No fixture ids found in selections")
+        return 0
+
+    in_clause = ",".join(str(fid) for fid in selected_fixture_ids)
+    fixtures = db.get(
+        "fixtures",
+        {
+            "id": f"in.({in_clause})",
+            "week_id": f"eq.{week_id}",
+            "select": "*",
+        },
+    )
     if not fixtures:
-        raise RuntimeError("No fixtures found for week")
-    print(f"[Results] Found {len(fixtures)} fixtures")
+        raise RuntimeError("No selected fixtures found for week")
+    print(f"[Results] Processing {len(fixtures)} selected fixtures")
 
     tls_session = get_tls_session()
 
@@ -182,12 +201,6 @@ def main() -> int:
 
     updated_fixtures = db.get("fixtures", {"week_id": f"eq.{week_id}", "select": "*"})
     fixtures_by_id = {f["id"]: f for f in updated_fixtures}
-
-    selections = db.get("selections", {"week_id": f"eq.{week_id}", "select": "*"})
-    if not selections:
-        print("[Results] No selections to process")
-        return 0
-    print(f"[Results] Found {len(selections)} selections")
 
     fine_entries: List[Dict[str, Any]] = []
     player_zero_zero: Dict[str, List[int]] = {}
