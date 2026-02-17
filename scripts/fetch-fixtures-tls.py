@@ -254,13 +254,23 @@ def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None
 
     home_events = sofa_get(session, f"/team/{home_team_id}/events/last/0").get("events") or []
     away_events = sofa_get(session, f"/team/{away_team_id}/events/last/0").get("events") or []
-    odds_payload = sofa_get(session, f"/event/{fixture_id}/odds/1/all")
 
     row["home_form"] = build_form(home_events, int(home_team_id), int(league_id), int(fixture_ts))
     row["away_form"] = build_form(away_events, int(away_team_id), int(league_id), int(fixture_ts))
-    over, under = extract_over_under_odds(odds_payload)
-    row["odds_over_25"] = over
-    row["odds_under_25"] = under
+
+    # Odds are often unavailable (404) until closer to kickoff; keep form data even when odds are missing.
+    try:
+        odds_payload = sofa_get(session, f"/event/{fixture_id}/odds/1/all")
+        over, under = extract_over_under_odds(odds_payload)
+        row["odds_over_25"] = over
+        row["odds_under_25"] = under
+    except Exception as exc:
+        if " 404 " in str(exc) or "error 404" in str(exc).lower():
+            row["odds_over_25"] = None
+            row["odds_under_25"] = None
+        else:
+            raise
+
     row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
 
 
