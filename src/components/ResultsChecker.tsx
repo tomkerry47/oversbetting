@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 
 interface ResultsCheckerProps {
-  onResultsChecked: () => void;
+  onResultsChecked: () => Promise<void>;
   hasSelections: boolean;
+  weekId?: number;
 }
 
-export default function ResultsChecker({ onResultsChecked, hasSelections }: ResultsCheckerProps) {
+export default function ResultsChecker({ onResultsChecked, hasSelections, weekId }: ResultsCheckerProps) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canCheck, setCanCheck] = useState(false);
@@ -50,15 +51,23 @@ export default function ResultsChecker({ onResultsChecked, hasSelections }: Resu
     setError(null);
 
     try {
-      const res = await fetch('/api/results', { method: 'POST' });
+      const res = await fetch('/api/results/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_id: weekId }),
+      });
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to check results');
+        setError(data.error || 'Failed to trigger results check');
         return;
       }
 
-      onResultsChecked();
+      // Poll for up to 45s so users can see updated results without manual refresh.
+      for (let i = 0; i < 9; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        await onResultsChecked();
+      }
     } catch {
       setError('Network error, please try again');
     } finally {

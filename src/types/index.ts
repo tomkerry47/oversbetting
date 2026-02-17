@@ -51,6 +51,27 @@ export interface Fixture {
   home_score: number | null;
   away_score: number | null;
   match_status: string;
+  home_form: Array<{
+    result: 'W' | 'D' | 'L';
+    homeScore: number;
+    awayScore: number;
+    opponent: string;
+    homeAway: 'H' | 'A';
+    date: string;
+    competition: string;
+  }> | null;
+  away_form: Array<{
+    result: 'W' | 'D' | 'L';
+    homeScore: number;
+    awayScore: number;
+    opponent: string;
+    homeAway: 'H' | 'A';
+    date: string;
+    competition: string;
+  }> | null;
+  odds_over_25: string | null;
+  odds_under_25: string | null;
+  insights_updated_at: string | null;
   created_at: string;
 }
 

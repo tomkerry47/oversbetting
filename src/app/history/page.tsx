@@ -54,28 +54,30 @@ export default function HistoryPage() {
     setCheckingResults(weekId);
     
     try {
-      const res = await fetch('/api/results', {
+      const res = await fetch('/api/results/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ week_id: weekId }),
       });
       if (res.ok) {
-        // Reload week data to show updated results
-        const dataRes = await fetch(`/api/history?week_id=${weekId}`);
-        const data = await dataRes.json();
-        setWeekData((prev) => ({
-          ...prev,
-          [weekId]: {
-            selections: data.selections || [],
-            fines: data.fines || [],
-          },
-        }));
-        
-        // Update the week in the weeks list to reflect status change
-        if (data.week) {
-          setWeeks((prev) =>
-            prev.map((w) => (w.id === weekId ? data.week : w))
-          );
+        // Poll week details for up to ~60s to catch workflow completion.
+        for (let i = 0; i < 12; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          const dataRes = await fetch(`/api/history?week_id=${weekId}`);
+          const data = await dataRes.json();
+          setWeekData((prev) => ({
+            ...prev,
+            [weekId]: {
+              selections: data.selections || [],
+              fines: data.fines || [],
+            },
+          }));
+
+          if (data.week) {
+            setWeeks((prev) =>
+              prev.map((w) => (w.id === weekId ? data.week : w))
+            );
+          }
         }
       }
     } catch {

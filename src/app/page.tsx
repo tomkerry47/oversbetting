@@ -220,6 +220,7 @@ export default function HomePage() {
       <ResultsChecker
         onResultsChecked={fetchData}
         hasSelections={selections.length > 0}
+        weekId={week?.id}
       />
 
       {/* Fixture Selector */}

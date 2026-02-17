@@ -1,17 +1,17 @@
-name: Fetch Next Week Fixtures
+name: Process Week Results
 
 on:
   workflow_dispatch:
     inputs:
-      week_offset:
-        description: "Week offset from current UK week (0=current, 1=next)"
-        required: true
-        default: "1"
+      week_id:
+        description: "Optional week id to process (blank uses active week)"
+        required: false
+        default: ""
 
 jobs:
-  sync-fixtures:
+  process-results:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -27,8 +27,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r scripts/requirements-tls.txt
 
-      - name: Fetch and upsert fixtures
-        run: python scripts/fetch-fixtures-tls.py --weekOffset=${{ github.event.inputs.week_offset }}
+      - name: Process results
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEK_ID: ${{ github.event.inputs.week_id }}
+        run: |
+          if [ -n "$WEEK_ID" ]; then
+            python scripts/process-results-tls.py --weekId="$WEEK_ID"
+          else
+            python scripts/process-results-tls.py
+          fi

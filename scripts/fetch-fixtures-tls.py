@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Fetch SofaScore fixtures with browser-like TLS fingerprinting and upsert into Supabase.
+Fetch SofaScore fixtures with browser-like TLS fingerprinting, enrich with form/odds,
+and upsert into Supabase.
 
 Usage:
   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
@@ -14,6 +15,7 @@ import datetime as dt
 import json
 import os
 import sys
+import time
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
@@ -84,15 +86,14 @@ def calculate_week_number(saturday_date: str, season_start: str = "2025-08-01") 
 
 
 def get_tls_session() -> tls_client.Session:
-    # Use a modern Chrome fingerprint. This is the key difference vs plain requests/fetch.
     return tls_client.Session(
         client_identifier="chrome_120",
         random_tls_extension_order=True,
     )
 
 
-def fetch_scheduled_events(session: tls_client.Session, date_iso: str) -> Dict[str, Any]:
-    url = f"{API_BASE}/sport/football/scheduled-events/{date_iso}"
+def sofa_get(session: tls_client.Session, endpoint: str, retries: int = 3) -> Dict[str, Any]:
+    url = f"{API_BASE}{endpoint}"
     headers = {
         "Accept": "*/*",
         "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
@@ -103,11 +104,25 @@ def fetch_scheduled_events(session: tls_client.Session, date_iso: str) -> Dict[s
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ),
     }
-    response = session.get(url, headers=headers, timeout_seconds=30)
-    if response.status_code != 200:
+
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        response = session.get(url, headers=headers, timeout_seconds=30)
+        if response.status_code == 200:
+            return json.loads(response.text)
+
         snippet = response.text[:300] if response.text else ""
-        raise RuntimeError(f"SofaScore error {response.status_code}: {snippet}")
-    return json.loads(response.text)
+        last_error = RuntimeError(f"SofaScore error {response.status_code} for {endpoint}: {snippet}")
+        if response.status_code == 403 and attempt < retries - 1:
+            time.sleep(1.5 + attempt)
+            continue
+        break
+
+    raise last_error or RuntimeError(f"Unknown SofaScore error for {endpoint}")
+
+
+def fetch_scheduled_events(session: tls_client.Session, date_iso: str) -> Dict[str, Any]:
+    return sofa_get(session, f"/sport/football/scheduled-events/{date_iso}")
 
 
 def filter_and_map_fixtures(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -157,6 +172,98 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]]) -> List[Dict[str, Any]
     return rows
 
 
+def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
+    winner_code = event.get("winnerCode")
+    home_id = (event.get("homeTeam") or {}).get("id")
+    away_id = (event.get("awayTeam") or {}).get("id")
+    team_is_home = team_id == home_id
+    team_is_away = team_id == away_id
+
+    if winner_code in (None, 0):
+        return "D"
+    if (winner_code == 1 and team_is_home) or (winner_code == 2 and team_is_away):
+        return "W"
+    return "L"
+
+
+def build_form(events: List[Dict[str, Any]], team_id: int, league_id: int, fixture_ts: int) -> List[Dict[str, Any]]:
+    cutoff_ts = fixture_ts - (180 * 24 * 60 * 60)
+    filtered = [
+        e
+        for e in events
+        if e.get("status", {}).get("type") == "finished"
+        and e.get("startTimestamp", 0) < fixture_ts
+        and e.get("startTimestamp", 0) >= cutoff_ts
+        and (e.get("tournament", {}).get("uniqueTournament", {}).get("id") == league_id)
+    ]
+    filtered.sort(key=lambda x: x.get("startTimestamp", 0), reverse=True)
+
+    out: List[Dict[str, Any]] = []
+    for event in filtered[:5]:
+        home = event.get("homeTeam") or {}
+        away = event.get("awayTeam") or {}
+        team_is_home = home.get("id") == team_id
+        opponent = away.get("name") if team_is_home else home.get("name")
+        score_home = (event.get("homeScore") or {}).get("current") or 0
+        score_away = (event.get("awayScore") or {}).get("current") or 0
+        match_date = dt.datetime.fromtimestamp(event.get("startTimestamp", 0), tz=UK_TZ)
+
+        out.append(
+            {
+                "result": winner_for_team(event, team_id),
+                "homeScore": score_home,
+                "awayScore": score_away,
+                "opponent": opponent,
+                "homeAway": "H" if team_is_home else "A",
+                "date": match_date.strftime("%d/%m/%Y"),
+                "competition": event.get("tournament", {}).get("uniqueTournament", {}).get("name"),
+            }
+        )
+
+    return out
+
+
+def extract_over_under_odds(odds_payload: Dict[str, Any]) -> tuple[str | None, str | None]:
+    markets = odds_payload.get("markets") or []
+    for market in markets:
+        if market.get("marketName") == "Match goals" and market.get("choiceGroup") == "2.5":
+            choices = market.get("choices") or []
+            over = choices[0].get("fractionalValue") if len(choices) > 0 else None
+            under = choices[1].get("fractionalValue") if len(choices) > 1 else None
+            return over, under
+    return None, None
+
+
+def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None:
+    fixture_id = row.get("api_fixture_id")
+    home_team_id = row.get("home_team_id")
+    away_team_id = row.get("away_team_id")
+    league_id = row.get("league_id")
+
+    if not fixture_id or not home_team_id or not away_team_id or not league_id:
+        row["home_form"] = []
+        row["away_form"] = []
+        row["odds_over_25"] = None
+        row["odds_under_25"] = None
+        row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        return
+
+    fixture_data = sofa_get(session, f"/event/{fixture_id}")
+    fixture_event = fixture_data.get("event") or {}
+    fixture_ts = fixture_event.get("startTimestamp") or int(dt.datetime.now(dt.timezone.utc).timestamp())
+
+    home_events = sofa_get(session, f"/team/{home_team_id}/events/last/0").get("events") or []
+    away_events = sofa_get(session, f"/team/{away_team_id}/events/last/0").get("events") or []
+    odds_payload = sofa_get(session, f"/event/{fixture_id}/odds/1/all")
+
+    row["home_form"] = build_form(home_events, int(home_team_id), int(league_id), int(fixture_ts))
+    row["away_form"] = build_form(away_events, int(away_team_id), int(league_id), int(fixture_ts))
+    over, under = extract_over_under_odds(odds_payload)
+    row["odds_over_25"] = over
+    row["odds_under_25"] = under
+    row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+
+
 class SupabaseRest:
     def __init__(self, base_url: str, service_role_key: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -199,7 +306,7 @@ class SupabaseRest:
             return
         headers = {"Prefer": "resolution=merge-duplicates,return=minimal"}
         url = f"{self.base_url}/rest/v1/fixtures?on_conflict=api_fixture_id"
-        res = self.session.post(url, data=json.dumps(rows), headers=headers, timeout=45)
+        res = self.session.post(url, data=json.dumps(rows), headers=headers, timeout=120)
         if res.status_code >= 300:
             raise RuntimeError(f"Failed to upsert fixtures: {res.status_code} {res.text[:300]}")
 
@@ -228,6 +335,21 @@ def main() -> int:
     if not fixture_rows:
         return 0
 
+    # Enrich each fixture with cached form and odds for instant UI dropdown details.
+    for i, row in enumerate(fixture_rows):
+        fixture_id = row.get("api_fixture_id")
+        try:
+            enrich_fixture_row(tls_session, row)
+            print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
+        except Exception as exc:
+            print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
+            row["home_form"] = []
+            row["away_form"] = []
+            row["odds_over_25"] = None
+            row["odds_under_25"] = None
+            row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        time.sleep(0.4)
+
     supabase = SupabaseRest(supabase_url, service_role)
     week = supabase.upsert_week(
         saturday_date=saturday_date,
@@ -239,7 +361,7 @@ def main() -> int:
         row["week_id"] = week["id"]
 
     supabase.upsert_fixtures(fixture_rows)
-    print(f"Stored/updated {len(fixture_rows)} fixtures for week {week['week_number']}")
+    print(f"Stored/updated {len(fixture_rows)} fixtures (with insights) for week {week['week_number']}")
     return 0
 
 
