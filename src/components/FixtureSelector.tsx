@@ -300,6 +300,7 @@ export default function FixtureSelector({
 
           {sortedLeagues.map(([league, leagueFixtures]) => {
             const isCollapsed = collapsedLeagues[league];
+            const starCount = leagueFixtures.filter((fixture) => fixture.is_star_pick).length;
             
             return (
               <div key={league} className="mb-3">
@@ -311,6 +312,11 @@ export default function FixtureSelector({
                     <span className={`transition-transform ${isCollapsed ? '' : 'rotate-90'}`}>▶</span>
                     <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
                     {league} ({leagueFixtures.length})
+                    {starCount > 0 && (
+                      <span className="inline-flex items-center rounded-md bg-amber-500/20 border border-amber-400/60 px-1 py-0.5 text-[10px] text-amber-300">
+                        ⭐ {starCount}
+                      </span>
+                    )}
                   </h4>
                 </button>
                 
