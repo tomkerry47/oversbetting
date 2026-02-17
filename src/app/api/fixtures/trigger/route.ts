@@ -5,6 +5,33 @@ type DispatchBody = {
   inputs: Record<string, string>;
 };
 
+async function findLatestWorkflowRun(
+  owner: string,
+  repo: string,
+  workflowFile: string,
+  ref: string,
+  token: string
+): Promise<number | null> {
+  const runsUrl = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&branch=${encodeURIComponent(ref)}&per_page=5`;
+  const runsResponse = await fetch(runsUrl, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+
+  if (!runsResponse.ok) {
+    return null;
+  }
+
+  const runsData = await runsResponse.json();
+  const runs = runsData?.workflow_runs || [];
+  if (runs.length === 0) return null;
+
+  return runs[0]?.id ?? null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { weekOffset } = await request.json().catch(() => ({ weekOffset: 1 }));
@@ -60,10 +87,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Dispatch API does not return a run id; fetch latest run for this workflow/branch.
+    // Small delay avoids a race where the run isn't visible immediately.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const runId = await findLatestWorkflowRun(owner, repo, workflowFile, ref, token);
+
     return NextResponse.json({
       ok: true,
       message: 'Fixture sync workflow triggered',
       weekOffset: workflowWeekOffset,
+      runId,
     });
   } catch (error: any) {
     console.error('Workflow trigger error:', error);

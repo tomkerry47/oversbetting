@@ -8,6 +8,21 @@ import WeeklyReset from '@/components/WeeklyReset';
 import { Fixture, Selection, Week, PLAYERS } from '@/types';
 import { formatDate } from '@/lib/utils';
 
+async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    console.log(`[Picks] ${url} -> ${response.status} in ${Date.now() - started}ms`);
+    return { response, data };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export default function HomePage() {
   const [week, setWeek] = useState<Week | null>(null);
   const [currentWeekNumber, setCurrentWeekNumber] = useState<number | null>(null);
@@ -21,12 +36,23 @@ export default function HomePage() {
 
   const fetchData = useCallback(async (offset: number = 0) => {
     try {
+      console.log(`[Picks] fetchData start (weekOffset=${offset})`);
       setLoadingMessage('Loading fixtures...');
-      const fixturesRes = await fetch(`/api/fixtures?weekOffset=${offset}`);
-      const fixturesData = await fixturesRes.json();
+      const { response: fixturesRes, data: fixturesData } = await fetchJsonWithTimeout(
+        `/api/fixtures?weekOffset=${offset}`,
+        undefined,
+        20000
+      );
+
+      if (!fixturesRes.ok) {
+        setError(fixturesData.error || 'Failed to load fixtures');
+        setLoadingMessage('');
+        return;
+      }
 
       if (fixturesData.error) {
         setError(fixturesData.error);
+        setLoadingMessage('');
         return;
       }
 
@@ -43,15 +69,27 @@ export default function HomePage() {
 
       // Fetch selections for this week
       if (fixturesData.week) {
-        const selectionsRes = await fetch(
-          `/api/selections?week_id=${fixturesData.week.id}`
+        const { response: selectionsRes, data: selectionsData } = await fetchJsonWithTimeout(
+          `/api/selections?week_id=${fixturesData.week.id}`,
+          undefined,
+          20000
         );
-        const selectionsData = await selectionsRes.json();
-        setSelections(selectionsData.selections || []);
-        setLoadingMessage(''); // Clear loading message after selections loaded
+        if (selectionsRes.ok) {
+          setSelections(selectionsData.selections || []);
+        } else {
+          console.error('[Picks] selections load failed:', selectionsData);
+        }
       }
+      setLoadingMessage(''); // Always clear after load attempt
+      console.log(`[Picks] fetchData success (weekOffset=${offset})`);
     } catch (err) {
-      setError('Failed to load data. Check your connection.');
+      console.error('[Picks] fetchData error:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Loading timed out. Please refresh or try again.');
+      } else {
+        setError('Failed to load data. Check your connection.');
+      }
+      setLoadingMessage('');
     } finally {
       setLoading(false);
     }
@@ -94,18 +132,39 @@ export default function HomePage() {
         setWeekOffset(targetWeekOffset);
       }
 
+      const runId = triggerData.runId;
+      if (!runId) {
+        setLoadingMessage('Fixture sync started. Check back shortly for updates.');
+        setTimeout(() => setLoadingMessage(''), 5000);
+        return;
+      }
+
       setLoadingMessage('Fixture sync running in GitHub Actions...');
 
-      // Poll DB for up to ~45s so UI updates when the workflow finishes.
-      const maxAttempts = 9;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      // Poll workflow status until completion (up to ~3 minutes).
+      const maxStatusPolls = 36;
+      for (let i = 0; i < maxStatusPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, 5000));
+        const statusRes = await fetch(`/api/fixtures/trigger-status?runId=${runId}`);
+        const statusData = await statusRes.json();
 
-        const fixturesRes = await fetch(`/api/fixtures?weekOffset=${targetWeekOffset}`);
-        const fixturesData = await fixturesRes.json();
-        const fixtureCount = fixturesData.fixtures?.length || 0;
+        if (!statusRes.ok) {
+          setError(statusData.error || 'Failed checking workflow status');
+          setLoadingMessage('');
+          return;
+        }
 
-        if (fixtureCount > 0) {
+        if (statusData.status === 'completed') {
+          if (statusData.conclusion !== 'success') {
+            setError(`Fixture sync failed (${statusData.conclusion || 'unknown'})`);
+            setLoadingMessage('');
+            return;
+          }
+
+          const fixturesRes = await fetch(`/api/fixtures?weekOffset=${targetWeekOffset}`);
+          const fixturesData = await fixturesRes.json();
+          const fixtureCount = fixturesData.fixtures?.length || 0;
+
           setWeek(fixturesData.week);
           setFixtures(fixturesData.fixtures || []);
           if (fixturesData.week) {
@@ -113,14 +172,14 @@ export default function HomePage() {
             const selectionsData = await selectionsRes.json();
             setSelections(selectionsData.selections || []);
           }
-          setLoadingMessage(`Synced ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
-          setTimeout(() => setLoadingMessage(''), 2500);
+          setLoadingMessage(`Fixture sync completed: ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
+          setTimeout(() => setLoadingMessage(''), 5000);
           return;
         }
       }
 
-      setLoadingMessage('Workflow started. Check back shortly for updated fixtures.');
-      setTimeout(() => setLoadingMessage(''), 3500);
+      setLoadingMessage('Fixture sync is still running. Check back shortly.');
+      setTimeout(() => setLoadingMessage(''), 5000);
     } catch (err) {
       setError('Network error, please try again');
       setLoadingMessage('');

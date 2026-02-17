@@ -59,6 +59,20 @@ export default function FixtureSelector({
     });
   };
 
+  const getOddsTone = (oddsRaw: string) => {
+    const value = parseFloat(oddsRaw);
+    if (Number.isNaN(value)) {
+      return 'bg-slate-700/70 text-slate-300 border border-slate-600';
+    }
+    if (value > 2) {
+      return 'bg-red-900/60 text-red-200 border border-red-700/70';
+    }
+    if (value < 1.5) {
+      return 'bg-emerald-900/60 text-emerald-200 border border-emerald-700/70';
+    }
+    return 'bg-amber-900/60 text-amber-200 border border-amber-700/70';
+  };
+
   // Group fixtures by league
   const groupedFixtures = fixtures.reduce<Record<string, Fixture[]>>((acc, f) => {
     if (!acc[f.league_name]) acc[f.league_name] = [];
@@ -336,20 +350,31 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-white truncate">
-                                  {fixture.home_team}
-                                </div>
-                                <div className="text-sm font-medium text-white truncate">
-                                  <span className="text-slate-500 text-xs mr-1">vs</span>
-                                  {fixture.away_team}
-                                </div>
-                                <div className="mt-1 text-[10px] text-slate-400 flex flex-wrap gap-x-2 gap-y-0.5">
-                                  <span>KO {formatKickoffTime(fixture.kick_off)}</span>
-                                  <span>
-                                    O/U 2.5:{' '}
-                                    {convertOddsToDecimal(fixture.odds_over_25 || 'N/A')} /{' '}
-                                    {convertOddsToDecimal(fixture.odds_under_25 || 'N/A')}
-                                  </span>
+                                <div className="w-full flex items-center justify-between gap-2">
+                                  <div className="text-sm font-medium text-white truncate">
+                                    {fixture.home_team}
+                                    <span className="text-slate-500 text-xs mx-1">vs</span>
+                                    {fixture.away_team}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+                                    <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
+                                      KO {formatKickoffTime(fixture.kick_off)}
+                                    </span>
+                                    {(() => {
+                                      const over = convertOddsToDecimal(fixture.odds_over_25 || 'N/A');
+                                      const under = convertOddsToDecimal(fixture.odds_under_25 || 'N/A');
+                                      return (
+                                        <>
+                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(over)}`}>
+                                            O {over}
+                                          </span>
+                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(under)}`}>
+                                            U {under}
+                                          </span>
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
                                 </div>
                               </div>
                               {fixture.home_team_id && fixture.away_team_id && (
