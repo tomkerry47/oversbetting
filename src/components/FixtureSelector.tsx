@@ -260,7 +260,7 @@ export default function FixtureSelector({
                 key={player}
                 onClick={() => {
                   setSelectedPlayer(player);
-                  setSelectedFixtures([]);
+                  setSelectedFixtures([...(existingSelections[player] || [])]);
                   setError(null);
                 }}
                 className={`py-4 px-3 rounded-xl border-2 transition-all font-semibold text-center active:scale-[0.97] ${
@@ -356,7 +356,7 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="w-full flex items-start justify-between gap-2">
+                                <div className="w-full grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                                   <div className="text-sm font-medium text-white flex items-start gap-1.5 min-w-0">
                                     {fixture.is_star_pick && (
                                       <span
@@ -372,7 +372,7 @@ export default function FixtureSelector({
                                       {fixture.away_team}
                                     </span>
                                   </div>
-                                  <div className="flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap flex-shrink-0 max-w-[170px]">
                                     <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
                                       KO {formatKickoffTime(fixture.kick_off)}
                                     </span>
