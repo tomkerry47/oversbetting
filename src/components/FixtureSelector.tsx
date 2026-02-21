@@ -334,7 +334,7 @@ export default function FixtureSelector({
                           <button
                             onClick={() => handleFixtureToggle(fixture.id)}
                             disabled={isFull}
-                            className={`w-full text-left p-3 border transition-all fixture-selectable
+                            className={`w-full text-left p-3.5 border transition-all fixture-selectable
                               ${
                                 isSelected
                                   ? 'fixture-selected border-emerald-500'
@@ -344,7 +344,7 @@ export default function FixtureSelector({
                               }
                               ${isExpanded ? 'rounded-t-xl border-b-0' : 'rounded-xl'}`}
                           >
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-start gap-3">
                               <div
                                 className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-xs
                                   ${
@@ -356,8 +356,8 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="w-full flex items-center justify-between gap-2">
-                                  <div className="text-sm font-medium text-white truncate flex items-center gap-1.5">
+                                <div className="w-full flex items-start justify-between gap-2">
+                                  <div className="text-sm font-medium text-white flex items-start gap-1.5 min-w-0">
                                     {fixture.is_star_pick && (
                                       <span
                                         className="inline-flex items-center rounded-md bg-amber-500/20 border border-amber-400/60 px-1 py-0.5 text-[10px] text-amber-300 flex-shrink-0"
@@ -366,7 +366,7 @@ export default function FixtureSelector({
                                         ⭐
                                       </span>
                                     )}
-                                    <span className="truncate">
+                                    <span className="whitespace-normal break-words leading-snug">
                                       {fixture.home_team}
                                       <span className="text-slate-500 text-xs mx-1">vs</span>
                                       {fixture.away_team}

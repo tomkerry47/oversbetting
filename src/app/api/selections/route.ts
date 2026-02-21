@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
 
+function toLeagueCode(leagueNameRaw: string | null | undefined): string {
+  const leagueName = String(leagueNameRaw || '').trim();
+  const knownCodes: Record<string, string> = {
+    'Premier League': 'pl',
+    Championship: 'champ',
+    'League One': 'l1',
+    'League Two': 'l2',
+    'National League': 'nl',
+    'Scottish Premiership': 'spl',
+    'Scottish Championship': 'schamp',
+    'Scottish League One': 'sl1',
+    'Scottish League Two': 'sl2',
+    'FA Cup': 'fac',
+    'Scottish Cup': 'sc'
+  };
+
+  if (knownCodes[leagueName]) return knownCodes[leagueName];
+
+  // Fallback for unexpected league names: short lowercase initials.
+  const initials = leagueName
+    .split(/\s+/)
+    .map((part) => part.replace(/[^A-Za-z0-9]/g, ''))
+    .filter(Boolean)
+    .map((part) => part[0]?.toLowerCase())
+    .join('');
+  return initials || 'lg';
+}
+
 /**
  * GET /api/selections - Get all selections for the current active week.
  */
@@ -168,9 +196,11 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
           acc[sel.player_name] = [];
         }
         acc[sel.player_name].push({
-          fixture: `${sel.fixture.is_star_pick ? '⭐ ' : ''}${sel.fixture.home_team} vs ${sel.fixture.away_team}`,
+          fixture: `${sel.fixture.is_star_pick ? '⭐ ' : ''}${sel.fixture.home_team} vs ${sel.fixture.away_team} (${toLeagueCode(sel.fixture.league_name)})`,
           home_team: sel.fixture.home_team,
           away_team: sel.fixture.away_team,
+          league_name: sel.fixture.league_name,
+          league_code: toLeagueCode(sel.fixture.league_name),
           kick_off: sel.fixture.kick_off,
         });
         return acc;
