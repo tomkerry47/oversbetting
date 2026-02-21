@@ -356,7 +356,7 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="w-full grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                                <div className="w-full grid grid-cols-[minmax(0,1fr)_84px] items-start gap-2">
                                   <div className="text-sm font-medium text-white flex items-start gap-1.5 min-w-0">
                                     {fixture.is_star_pick && (
                                       <span
@@ -372,8 +372,8 @@ export default function FixtureSelector({
                                       {fixture.away_team}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-end gap-1.5 flex-wrap flex-shrink-0 max-w-[170px]">
-                                    <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
+                                  <div className="flex flex-col items-stretch gap-1 flex-shrink-0 w-[84px]">
+                                    <span className="inline-flex items-center justify-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200 whitespace-nowrap">
                                       KO {formatKickoffTime(fixture.kick_off)}
                                     </span>
                                     {(() => {
@@ -381,10 +381,10 @@ export default function FixtureSelector({
                                       const under = convertOddsToDecimal(fixture.odds_under_25 || 'N/A');
                                       return (
                                         <>
-                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(over)}`}>
+                                          <span className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${getOddsTone(over)}`}>
                                             O {over}
                                           </span>
-                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(under)}`}>
+                                          <span className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${getOddsTone(under)}`}>
                                             U {under}
                                           </span>
                                         </>
@@ -410,7 +410,7 @@ export default function FixtureSelector({
                           {isExpanded && details && (
                             <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
                               <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="grid grid-cols-2 gap-2">
                                 <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
                                   <div className="text-[10px] font-semibold text-slate-300 mb-1">{fixture.home_team}</div>
                                   <div className="flex gap-1 mb-1">
