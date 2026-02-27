@@ -47,6 +47,8 @@ export interface Fixture {
   away_team_logo: string | null;
   league_name: string;
   league_id: number;
+  home_team_position: number | null;
+  away_team_position: number | null;
   kick_off: string;
   home_score: number | null;
   away_score: number | null;
@@ -56,6 +58,7 @@ export interface Fixture {
     homeScore: number;
     awayScore: number;
     opponent: string;
+    opponentPosition?: number | null;
     homeAway: 'H' | 'A';
     date: string;
     competition: string;
@@ -65,6 +68,7 @@ export interface Fixture {
     homeScore: number;
     awayScore: number;
     opponent: string;
+    opponentPosition?: number | null;
     homeAway: 'H' | 'A';
     date: string;
     competition: string;

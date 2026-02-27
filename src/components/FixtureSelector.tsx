@@ -16,6 +16,7 @@ interface FixtureDetails {
     homeScore: number;
     awayScore: number;
     opponent: string;
+    opponentPosition?: number | null;
     homeAway: 'H' | 'A';
     date: string;
     competition: string;
@@ -25,6 +26,7 @@ interface FixtureDetails {
     homeScore: number;
     awayScore: number;
     opponent: string;
+    opponentPosition?: number | null;
     homeAway: 'H' | 'A';
     date: string;
     competition: string;
@@ -412,7 +414,10 @@ export default function FixtureSelector({
                               <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
-                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">{fixture.home_team}</div>
+                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">
+                                    {fixture.home_team}
+                                    {fixture.home_team_position ? ` (#${fixture.home_team_position})` : ''}
+                                  </div>
                                   <div className="flex gap-1 mb-1">
                                     {details.homeForm.map((match, idx) => (
                                       <div
@@ -433,7 +438,10 @@ export default function FixtureSelector({
                                   </div>
                                 </div>
                                 <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
-                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">{fixture.away_team}</div>
+                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">
+                                    {fixture.away_team}
+                                    {fixture.away_team_position ? ` (#${fixture.away_team_position})` : ''}
+                                  </div>
                                   <div className="flex gap-1 mb-1">
                                     {details.awayForm.map((match, idx) => (
                                       <div

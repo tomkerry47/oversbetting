@@ -31,6 +31,8 @@ CREATE TABLE fixtures (
   away_team_logo  TEXT,
   league_name     TEXT NOT NULL,
   league_id       INT NOT NULL,
+  home_team_position INT,
+  away_team_position INT,
   kick_off        TIMESTAMPTZ NOT NULL,
   home_score      INT,
   away_score      INT,

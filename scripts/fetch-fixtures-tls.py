@@ -47,6 +47,8 @@ SOFASCORE_TOURNAMENTS: Dict[int, str] = {
     209: "Scottish League Two",
 }
 
+STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -186,7 +188,40 @@ def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
     return "L"
 
 
-def build_form(events: List[Dict[str, Any]], team_id: int, league_id: int, fixture_ts: int) -> List[Dict[str, Any]]:
+def fetch_table_positions(
+    session: tls_client.Session, league_id: int, season_id: int | None
+) -> Dict[int, int]:
+    if not season_id:
+        return {}
+
+    cache_key = f"{league_id}:{season_id}"
+    if cache_key in STANDINGS_CACHE:
+        return STANDINGS_CACHE[cache_key]
+
+    try:
+        payload = sofa_get(session, f"/unique-tournament/{league_id}/season/{season_id}/standings/total")
+        standings = payload.get("standings") or []
+        rows = standings[0].get("rows") if standings else []
+        out: Dict[int, int] = {}
+        for row in rows or []:
+            team_id = (row.get("team") or {}).get("id")
+            position = row.get("position")
+            if isinstance(team_id, int) and isinstance(position, int):
+                out[team_id] = position
+        STANDINGS_CACHE[cache_key] = out
+        return out
+    except Exception:
+        STANDINGS_CACHE[cache_key] = {}
+        return {}
+
+
+def build_form(
+    events: List[Dict[str, Any]],
+    team_id: int,
+    league_id: int,
+    fixture_ts: int,
+    positions_by_team: Dict[int, int] | None = None,
+) -> List[Dict[str, Any]]:
     cutoff_ts = fixture_ts - (180 * 24 * 60 * 60)
     filtered = [
         e
@@ -203,6 +238,7 @@ def build_form(events: List[Dict[str, Any]], team_id: int, league_id: int, fixtu
         home = event.get("homeTeam") or {}
         away = event.get("awayTeam") or {}
         team_is_home = home.get("id") == team_id
+        opponent_id = away.get("id") if team_is_home else home.get("id")
         opponent = away.get("name") if team_is_home else home.get("name")
         score_home = (event.get("homeScore") or {}).get("current") or 0
         score_away = (event.get("awayScore") or {}).get("current") or 0
@@ -214,6 +250,7 @@ def build_form(events: List[Dict[str, Any]], team_id: int, league_id: int, fixtu
                 "homeScore": score_home,
                 "awayScore": score_away,
                 "opponent": opponent,
+                "opponentPosition": (positions_by_team or {}).get(opponent_id),
                 "homeAway": "H" if team_is_home else "A",
                 "date": match_date.strftime("%d/%m/%Y"),
                 "competition": event.get("tournament", {}).get("uniqueTournament", {}).get("name"),
@@ -356,6 +393,8 @@ def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None
         row["away_form"] = []
         row["odds_over_25"] = None
         row["odds_under_25"] = None
+        row["home_team_position"] = None
+        row["away_team_position"] = None
         row["is_star_pick"] = False
         row["star_rank"] = None
         row["star_score"] = None
@@ -365,12 +404,28 @@ def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None
     fixture_data = sofa_get(session, f"/event/{fixture_id}")
     fixture_event = fixture_data.get("event") or {}
     fixture_ts = fixture_event.get("startTimestamp") or int(dt.datetime.now(dt.timezone.utc).timestamp())
+    season_id = (fixture_event.get("season") or {}).get("id")
+    positions_by_team = fetch_table_positions(session, int(league_id), season_id)
+    row["home_team_position"] = positions_by_team.get(int(home_team_id))
+    row["away_team_position"] = positions_by_team.get(int(away_team_id))
 
     home_events = sofa_get(session, f"/team/{home_team_id}/events/last/0").get("events") or []
     away_events = sofa_get(session, f"/team/{away_team_id}/events/last/0").get("events") or []
 
-    row["home_form"] = build_form(home_events, int(home_team_id), int(league_id), int(fixture_ts))
-    row["away_form"] = build_form(away_events, int(away_team_id), int(league_id), int(fixture_ts))
+    row["home_form"] = build_form(
+        home_events,
+        int(home_team_id),
+        int(league_id),
+        int(fixture_ts),
+        positions_by_team,
+    )
+    row["away_form"] = build_form(
+        away_events,
+        int(away_team_id),
+        int(league_id),
+        int(fixture_ts),
+        positions_by_team,
+    )
 
     # Odds are often unavailable (404) until closer to kickoff; keep form data even when odds are missing.
     try:
@@ -471,6 +526,8 @@ def main() -> int:
             row["away_form"] = []
             row["odds_over_25"] = None
             row["odds_under_25"] = None
+            row["home_team_position"] = None
+            row["away_team_position"] = None
             row["is_star_pick"] = False
             row["star_rank"] = None
             row["star_score"] = None
