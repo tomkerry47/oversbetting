@@ -358,8 +358,8 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="w-full grid grid-cols-[minmax(0,1fr)_84px] items-start gap-2">
-                                  <div className="text-sm font-medium text-white flex items-start gap-1.5 min-w-0">
+                                <div className="w-full flex items-center justify-between gap-2">
+                                  <div className="text-sm font-medium text-white flex items-center gap-1.5 min-w-0">
                                     {fixture.is_star_pick && (
                                       <span
                                         className="inline-flex items-center rounded-md bg-amber-500/20 border border-amber-400/60 px-1 py-0.5 text-[10px] text-amber-300 flex-shrink-0"
@@ -374,8 +374,8 @@ export default function FixtureSelector({
                                       {fixture.away_team}
                                     </span>
                                   </div>
-                                  <div className="flex flex-col items-stretch gap-1 flex-shrink-0 w-[84px]">
-                                    <span className="inline-flex items-center justify-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5 whitespace-nowrap flex-shrink-0">
+                                    <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
                                       KO {formatKickoffTime(fixture.kick_off)}
                                     </span>
                                     {(() => {
@@ -383,10 +383,10 @@ export default function FixtureSelector({
                                       const under = convertOddsToDecimal(fixture.odds_under_25 || 'N/A');
                                       return (
                                         <>
-                                          <span className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${getOddsTone(over)}`}>
+                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(over)}`}>
                                             O {over}
                                           </span>
-                                          <span className={`inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap ${getOddsTone(under)}`}>
+                                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${getOddsTone(under)}`}>
                                             U {under}
                                           </span>
                                         </>
