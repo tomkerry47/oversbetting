@@ -147,7 +147,13 @@ export async function GET(request: NextRequest) {
         if (!playerResults[sel.player_name]) {
           playerResults[sel.player_name] = { wins: 0, losses: 0, pending: 0 };
         }
-        playerResults[sel.player_name][sel.result as 'wins' | 'losses' | 'pending']++;
+        if (sel.result === 'won') {
+          playerResults[sel.player_name].wins++;
+        } else if (sel.result === 'lost') {
+          playerResults[sel.player_name].losses++;
+        } else {
+          playerResults[sel.player_name].pending++;
+        }
       }
 
       weeklyBreakdown.push({
