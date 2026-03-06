@@ -122,6 +122,30 @@ export async function POST(request: NextRequest) {
       .eq('week_id', week_id)
       .eq('player_name', player_name);
 
+    // Prevent duplicate fixture picks across different players in the same week.
+    const { data: takenByOthers } = await supabase
+      .from('selections')
+      .select('fixture_id, player_name')
+      .eq('week_id', week_id)
+      .in('fixture_id', fixture_ids)
+      .neq('player_name', player_name);
+
+    if (takenByOthers && takenByOthers.length > 0) {
+      const fixtureIds = Array.from(
+        new Set(takenByOthers.map((row: any) => row.fixture_id))
+      );
+      const takenByNames = Array.from(
+        new Set(takenByOthers.map((row: any) => row.player_name))
+      );
+      return NextResponse.json(
+        {
+          error: `One or more fixtures are already picked by ${takenByNames.join(', ')}`,
+          fixture_ids: fixtureIds,
+        },
+        { status: 409 }
+      );
+    }
+
     if (existing && existing.length > 0) {
       // Delete existing selections to allow re-submission
       await supabase

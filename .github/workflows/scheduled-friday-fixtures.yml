@@ -1,0 +1,48 @@
+name: Scheduled Friday Fixture Refresh
+
+on:
+  schedule:
+    # Runs hourly on Fridays (UTC); guarded below to execute only at 09:00 Europe/London.
+    - cron: "0 * * * 5"
+  workflow_dispatch:
+
+jobs:
+  sync-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check UK schedule window
+        id: guard
+        run: |
+          HOUR_UK=$(TZ=Europe/London date +%H)
+          DOW_UK=$(TZ=Europe/London date +%u)
+          if [ "$DOW_UK" = "5" ] && [ "$HOUR_UK" = "09" ]; then
+            echo "run_now=true" >> "$GITHUB_OUTPUT"
+            echo "Running scheduled fixture refresh at UK hour $HOUR_UK"
+          else
+            echo "run_now=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: UK day/hour is $DOW_UK/$HOUR_UK"
+          fi
+
+      - name: Setup Python
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements-tls.txt
+
+      - name: Fetch and upsert next-week fixtures
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        run: python scripts/fetch-fixtures-tls.py --weekOffset=1
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

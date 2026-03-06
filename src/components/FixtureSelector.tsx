@@ -247,6 +247,15 @@ export default function FixtureSelector({
     return (existingSelections[player] || []).length > 0;
   };
 
+  const fixturePickedByPlayers = PLAYERS.reduce<Record<number, PlayerName[]>>((acc, player) => {
+    const picked = existingSelections[player] || [];
+    picked.forEach((fixtureId) => {
+      if (!acc[fixtureId]) acc[fixtureId] = [];
+      acc[fixtureId].push(player);
+    });
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-4">
       {/* Player Selection */}
@@ -325,9 +334,13 @@ export default function FixtureSelector({
                 {!isCollapsed && (
                   <div className="space-y-1.5">{leagueFixtures.map((fixture) => {
                       const isSelected = selectedFixtures.includes(fixture.id);
+                      const pickedBy = fixturePickedByPlayers[fixture.id] || [];
+                      const pickedByOtherPlayers = pickedBy.filter((name) => name !== selectedPlayer);
+                      const isPickedByOther = pickedByOtherPlayers.length > 0;
                       const isFull =
                         selectedFixtures.length >= MAX_SELECTIONS_PER_PLAYER &&
                         !isSelected;
+                      const isLocked = isPickedByOther && !isSelected;
                       const isExpanded = expandedFixture === fixture.id;
                       const details = fixtureDetails[fixture.id];
 
@@ -335,11 +348,13 @@ export default function FixtureSelector({
                         <div key={fixture.id}>
                           <button
                             onClick={() => handleFixtureToggle(fixture.id)}
-                            disabled={isFull}
+                            disabled={isFull || isLocked}
                             className={`w-full text-left p-3.5 border transition-all fixture-selectable
                               ${
                                 isSelected
                                   ? 'fixture-selected border-emerald-500'
+                                  : isLocked
+                                  ? 'border-slate-700 bg-slate-800/50 opacity-45 cursor-not-allowed'
                                   : isFull
                                   ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
                                   : 'border-slate-700 bg-slate-800/50'
@@ -394,6 +409,11 @@ export default function FixtureSelector({
                                     })()}
                                   </div>
                                 </div>
+                                {isPickedByOther && (
+                                  <div className="mt-1 text-[10px] text-amber-400">
+                                    Picked by {pickedByOtherPlayers.join(', ')}
+                                  </div>
+                                )}
                               </div>
                               {fixture.home_team_id && fixture.away_team_id && (
                                 <button

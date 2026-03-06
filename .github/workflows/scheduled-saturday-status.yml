@@ -1,0 +1,68 @@
+name: Scheduled Saturday Bet Status Update
+
+on:
+  schedule:
+    # Runs hourly on Saturdays (UTC); guarded below to execute only at 16:00 Europe/London.
+    - cron: "0 * * * 6"
+  workflow_dispatch:
+    inputs:
+      week_id:
+        description: "Optional week id for result refresh (blank uses active week)"
+        required: false
+        default: ""
+
+jobs:
+  status-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check UK schedule window
+        id: guard
+        run: |
+          HOUR_UK=$(TZ=Europe/London date +%H)
+          DOW_UK=$(TZ=Europe/London date +%u)
+          if [ "$DOW_UK" = "6" ] && [ "$HOUR_UK" = "16" ]; then
+            echo "run_now=true" >> "$GITHUB_OUTPUT"
+            echo "Running scheduled status update at UK hour $HOUR_UK"
+          else
+            echo "run_now=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: UK day/hour is $DOW_UK/$HOUR_UK"
+          fi
+
+      - name: Setup Python
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements-tls.txt
+
+      - name: Refresh latest results first
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WEEK_ID: ${{ github.event.inputs.week_id }}
+        run: |
+          if [ -n "$WEEK_ID" ]; then
+            python scripts/process-results-tls.py --weekId="$WEEK_ID"
+          else
+            python scripts/process-results-tls.py
+          fi
+
+      - name: Send status update to Pipedream
+        if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PIPEDREAM_STATUS_WEBHOOK_URL: ${{ secrets.PIPEDREAM_STATUS_WEBHOOK_URL }}
+          SELECTIONS_COMPLETE_WEBHOOK_URL: ${{ secrets.SELECTIONS_COMPLETE_WEBHOOK_URL }}
+        run: python scripts/send-bet-status-update.py
