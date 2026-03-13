@@ -22,6 +22,32 @@ import requests
 UK_TZ = ZoneInfo("Europe/London")
 
 
+def to_league_code(league_name_raw: Any) -> str:
+    league_name = str(league_name_raw or "").strip()
+    known_codes = {
+        "Premier League": "pl",
+        "Championship": "champ",
+        "League One": "l1",
+        "League Two": "l2",
+        "National League": "nl",
+        "Scottish Premiership": "spl",
+        "Scottish Championship": "schamp",
+        "Scottish League One": "sl1",
+        "Scottish League Two": "sl2",
+        "FA Cup": "fac",
+        "Scottish Cup": "sc",
+    }
+    if league_name in known_codes:
+        return known_codes[league_name]
+
+    initials = "".join(
+        part[:1].lower()
+        for part in "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in league_name).split()
+        if part
+    )
+    return initials or "lg"
+
+
 class SupabaseRest:
     def __init__(self, base_url: str, service_role_key: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -73,12 +99,12 @@ def find_target_week(db: SupabaseRest) -> Dict[str, Any] | None:
 def main() -> int:
     supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
     service_role = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    webhook_url = os.getenv("PIPEDREAM_STATUS_WEBHOOK_URL") or os.getenv("SELECTIONS_COMPLETE_WEBHOOK_URL")
+    webhook_url = os.getenv("SELECTIONS_COMPLETE_WEBHOOK_URL") or os.getenv("PIPEDREAM_STATUS_WEBHOOK_URL")
 
     if not supabase_url or not service_role:
         raise SystemExit("Missing SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY.")
     if not webhook_url:
-        raise SystemExit("Missing PIPEDREAM_STATUS_WEBHOOK_URL (or SELECTIONS_COMPLETE_WEBHOOK_URL).")
+        raise SystemExit("Missing SELECTIONS_COMPLETE_WEBHOOK_URL (or PIPEDREAM_STATUS_WEBHOOK_URL).")
 
     db = SupabaseRest(supabase_url, service_role)
     week = find_target_week(db)
@@ -105,10 +131,14 @@ def main() -> int:
     )
 
     by_player: Dict[str, Dict[str, Any]] = {}
+    summary: Dict[str, List[Dict[str, Any]]] = {}
+    selections_payload: List[Dict[str, Any]] = []
     for sel in selections:
         name = sel["player_name"]
         if name not in by_player:
             by_player[name] = {"wins": 0, "losses": 0, "pending": 0, "picks": []}
+        if name not in summary:
+            summary[name] = []
 
         result = sel.get("result")
         if result == "won":
@@ -119,28 +149,81 @@ def main() -> int:
             by_player[name]["pending"] += 1
 
         fixture = sel.get("fixture") or {}
+        league_name = fixture.get("league_name")
+        league_code = to_league_code(league_name)
+        fixture_label = f"{'⭐ ' if fixture.get('is_star_pick') else ''}{fixture.get('home_team')} vs {fixture.get('away_team')} ({league_code})"
+        score_text = (
+            f"{fixture.get('home_score')}-{fixture.get('away_score')}"
+            if fixture.get("home_score") is not None and fixture.get("away_score") is not None
+            else None
+        )
+
         by_player[name]["picks"].append(
             {
-                "fixture": f"{'⭐ ' if fixture.get('is_star_pick') else ''}{fixture.get('home_team')} vs {fixture.get('away_team')}",
-                "score": (
-                    f"{fixture.get('home_score')}-{fixture.get('away_score')}"
-                    if fixture.get("home_score") is not None and fixture.get("away_score") is not None
-                    else None
-                ),
+                "fixture": fixture_label,
+                "score": score_text,
                 "status": fixture.get("match_status"),
                 "result": result,
             }
         )
+        summary[name].append(
+            {
+                "fixture": fixture_label,
+                "home_team": fixture.get("home_team"),
+                "away_team": fixture.get("away_team"),
+                "league_name": league_name,
+                "league_code": league_code,
+                "kick_off": fixture.get("kick_off"),
+                "score": score_text,
+                "status": fixture.get("match_status"),
+                "result": result,
+            }
+        )
+        selections_payload.append(
+            {
+                "player_name": name,
+                "result": result,
+                "total_goals": sel.get("total_goals"),
+                "fixture": fixture,
+            }
+        )
+
+    lines: List[str] = []
+    lines.append(f"📣 Week {week.get('week_number')} status update")
+    lines.append(f"📅 {week.get('saturday_date')}")
+    lines.append("")
+    for player_name in sorted(by_player.keys()):
+        p = by_player[player_name]
+        lines.append(f"{player_name}:")
+        for pick in p["picks"]:
+            score_text = f" ({pick['score']})" if pick.get("score") else ""
+            status_text = f" [{pick['status']}]" if pick.get("status") else ""
+            lines.append(f"- {pick['fixture']}{score_text}{status_text}")
+        lines.append("")
+
+    if fines:
+        fine_bits = [f"{fine.get('player_name')} £{fine.get('amount')}" for fine in fines]
+        lines.append(f"💰 Fines: {' • '.join(fine_bits)}")
+
+    message = "\n".join(lines).strip()
 
     payload = {
         "event": "bet_status_update",
         "sent_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        # Backward-compatible top-level fields shared with selections_complete webhook shape.
+        "week_id": week.get("id"),
+        "saturday_date": week.get("saturday_date"),
+        "total_selections": len(selections),
+        "players_submitted": len(summary.keys()),
+        "selections": selections_payload,
         "week": {
             "id": week.get("id"),
             "week_number": week.get("week_number"),
             "saturday_date": week.get("saturday_date"),
             "status": week.get("status"),
         },
+        "summary": summary,
+        "message": message,
         "totals": {
             "selections": len(selections),
             "resolved": len([s for s in selections if s.get("result") in ("won", "lost")]),

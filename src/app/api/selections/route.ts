@@ -229,7 +229,27 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
         });
         return acc;
       }, {}),
+      message: '',
     };
+
+    const messageLines: string[] = [];
+    messageLines.push('🎲 All Selections In! 🎲');
+    messageLines.push('');
+    messageLines.push(`📅 Saturday: ${new Date(week.saturday_date).toLocaleDateString('en-GB')}`);
+    messageLines.push('');
+    messageLines.push('⚽ Picks:');
+    messageLines.push('');
+    for (const player of PLAYERS) {
+      const picks = payload.summary?.[player] || [];
+      if (!Array.isArray(picks) || picks.length === 0) continue;
+      messageLines.push(`${player}:`);
+      for (const pick of picks) {
+        messageLines.push(`• ${pick.fixture}`);
+      }
+      messageLines.push('');
+    }
+    messageLines.push('Good luck!');
+    payload.message = messageLines.join('\n');
 
     console.log(`Triggering selections webhook for week ${weekId} with ${selections.length} selections`);
     const response = await fetch(webhookUrl, {

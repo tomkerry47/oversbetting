@@ -40,9 +40,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r scripts/requirements-tls.txt
 
-      - name: Fetch and upsert next-week fixtures
+      - name: Fetch and upsert upcoming Saturday fixtures
         if: github.event_name == 'workflow_dispatch' || steps.guard.outputs.run_now == 'true'
-        run: python scripts/fetch-fixtures-tls.py --weekOffset=1
+        run: python scripts/fetch-fixtures-tls.py --weekOffset=0
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
