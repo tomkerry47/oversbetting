@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import FixtureSelector from '@/components/FixtureSelector';
 import SelectionsDisplay from '@/components/SelectionsDisplay';
-import ResultsChecker from '@/components/ResultsChecker';
 import WeeklyReset from '@/components/WeeklyReset';
 import { Fixture, Selection, Week, PLAYERS } from '@/types';
 import { formatDate } from '@/lib/utils';
@@ -274,13 +273,6 @@ export default function HomePage() {
 
       {/* Selections Display */}
       <SelectionsDisplay selections={selections} />
-
-      {/* Results Checker */}
-      <ResultsChecker
-        onResultsChecked={fetchData}
-        hasSelections={selections.length > 0}
-        weekId={week?.id}
-      />
 
       {/* Fixture Selector */}
       {week && (
