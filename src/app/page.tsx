@@ -277,10 +277,11 @@ export default function HomePage() {
       {/* Fixture Selector */}
       {week && (
         <FixtureSelector
+          key={week.id}
           fixtures={fixtures}
           weekId={week.id}
           existingSelections={existingSelections}
-          onSelectionSubmitted={fetchData}
+          onSelectionSubmitted={() => fetchData(weekOffset)}
         />
       )}
 

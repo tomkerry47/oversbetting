@@ -83,6 +83,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { player_name, fixture_ids, week_id } = body;
+    const uniqueFixtureIds = Array.isArray(fixture_ids)
+      ? Array.from(new Set(fixture_ids.map((fixtureId: unknown) => Number(fixtureId))))
+      : [];
 
     // Validate player
     if (!PLAYERS.includes(player_name as PlayerName)) {
@@ -93,9 +96,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate selection count
-    if (!fixture_ids || fixture_ids.length !== MAX_SELECTIONS_PER_PLAYER) {
+    if (uniqueFixtureIds.length !== MAX_SELECTIONS_PER_PLAYER) {
       return NextResponse.json(
         { error: `Must select exactly ${MAX_SELECTIONS_PER_PLAYER} fixtures` },
+        { status: 400 }
+      );
+    }
+
+    if (uniqueFixtureIds.some((fixtureId) => !Number.isInteger(fixtureId) || fixtureId <= 0)) {
+      return NextResponse.json(
+        { error: 'Invalid fixture selection submitted' },
         { status: 400 }
       );
     }
@@ -127,7 +137,7 @@ export async function POST(request: NextRequest) {
       .from('selections')
       .select('fixture_id, player_name')
       .eq('week_id', week_id)
-      .in('fixture_id', fixture_ids)
+      .in('fixture_id', uniqueFixtureIds)
       .neq('player_name', player_name);
 
     if (takenByOthers && takenByOthers.length > 0) {
@@ -156,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new selections
-    const selectionRows = fixture_ids.map((fid: number) => ({
+    const selectionRows = uniqueFixtureIds.map((fid: number) => ({
       week_id,
       player_name,
       fixture_id: fid,
@@ -178,9 +188,15 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('week_id', week_id);
 
-    if (allSelections && allSelections.length === PLAYERS.length * MAX_SELECTIONS_PER_PLAYER) {
+    const playersWithCompleteSelections = PLAYERS.filter((player) => {
+      const playerSelections = (allSelections || []).filter((selection: any) => selection.player_name === player);
+      const uniquePlayerFixtureIds = new Set(playerSelections.map((selection: any) => selection.fixture_id));
+      return uniquePlayerFixtureIds.size === MAX_SELECTIONS_PER_PLAYER;
+    });
+
+    if (playersWithCompleteSelections.length === PLAYERS.length) {
       // All selections complete - trigger webhook
-      await triggerWebhook(week_id, week, allSelections);
+      await triggerWebhook(week_id, week, allSelections || []);
     }
 
     return NextResponse.json({ selections });

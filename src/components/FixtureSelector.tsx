@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Fixture, PlayerName, PLAYERS, MAX_SELECTIONS_PER_PLAYER } from '@/types';
 
 interface FixtureSelectorProps {
@@ -50,6 +50,16 @@ export default function FixtureSelector({
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedFixture, setExpandedFixture] = useState<number | null>(null);
   const [fixtureDetails, setFixtureDetails] = useState<Record<number, FixtureDetails>>({});
+
+  useEffect(() => {
+    setSelectedPlayer(null);
+    setSelectedFixtures([]);
+    setSubmitting(false);
+    setError(null);
+    setSuccess(null);
+    setExpandedFixture(null);
+    setFixtureDetails({});
+  }, [weekId]);
 
   const formatKickoffTime = (isoDate: string): string => {
     const date = new Date(isoDate);
@@ -187,6 +197,13 @@ export default function FixtureSelector({
   };
 
   const handleFixtureToggle = (fixtureId: number) => {
+    const pickedBy = fixturePickedByPlayers[fixtureId] || [];
+    const pickedByOtherPlayers = pickedBy.filter((name) => name !== selectedPlayer);
+    if (pickedByOtherPlayers.length > 0 && !selectedFixtures.includes(fixtureId)) {
+      setError(`That fixture is already picked by ${pickedByOtherPlayers.join(', ')}`);
+      return;
+    }
+
     setSelectedFixtures((prev) => {
       if (prev.includes(fixtureId)) {
         return prev.filter((id) => id !== fixtureId);
