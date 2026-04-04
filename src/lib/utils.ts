@@ -109,6 +109,34 @@ export function canCheckResultsForWeek(week: Pick<Week, 'target_date' | 'target_
   return new Date() >= getRoundResultsAvailableAt(week.target_date, week.target_kickoff_time);
 }
 
+export function toLeagueCode(leagueNameRaw: string | null | undefined): string {
+  const leagueName = String(leagueNameRaw || '').trim();
+  const knownCodes: Record<string, string> = {
+    'Premier League': 'pl',
+    Championship: 'champ',
+    'League One': 'l1',
+    'League Two': 'l2',
+    'National League': 'nl',
+    'Scottish Premiership': 'spl',
+    'Scottish Championship': 'schamp',
+    'Scottish League One': 'sl1',
+    'Scottish League Two': 'sl2',
+    'FA Cup': 'fac',
+    'Scottish Cup': 'sc',
+  };
+
+  if (knownCodes[leagueName]) return knownCodes[leagueName];
+
+  const initials = leagueName
+    .split(/\s+/)
+    .map((part) => part.replace(/[^A-Za-z0-9]/g, ''))
+    .filter(Boolean)
+    .map((part) => part[0]?.toLowerCase())
+    .join('');
+
+  return initials || 'lg';
+}
+
 /**
  * Calculate week number based on the season start.
  */
@@ -141,7 +169,7 @@ export function formatSelectionsForCopy(
     }
     if (sel.fixture) {
       grouped[sel.player_name].push(
-        `${sel.fixture.home_team} vs ${sel.fixture.away_team}`
+        `${sel.fixture.home_team} vs ${sel.fixture.away_team} (${toLeagueCode(sel.fixture.league_name)})`
       );
     }
   }

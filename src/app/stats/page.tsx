@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { PlayerStats, PLAYERS } from '@/types';
+import { PlayerStats, PLAYERS, MAX_SELECTIONS_PER_PLAYER } from '@/types';
 import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
 interface WeeklyBreakdown {
@@ -80,6 +80,105 @@ export default function StatsPage() {
     (a, b) => b.win_rate - a.win_rate || b.wins - a.wins
   )[0];
 
+  const hottestStreak = [...stats].sort(
+    (a, b) => b.current_streak - a.current_streak || b.best_streak - a.best_streak
+  )[0];
+  const coldestRun = [...stats].sort(
+    (a, b) => b.losses - a.losses || a.win_rate - b.win_rate
+  )[0];
+  const goalMachine = [...stats].sort(
+    (a, b) => b.avg_goals - a.avg_goals || b.wins - a.wins
+  )[0];
+  const fineMagnet = [...stats].sort(
+    (a, b) => b.outstanding_fines - a.outstanding_fines || b.total_fines - a.total_fines
+  )[0];
+
+  const getRoundSpanForPickStreak = (
+    playerName: string,
+    mode: 'wins' | 'losses',
+    targetPickCount: number
+  ) => {
+    let rounds = 0;
+    let picksCovered = 0;
+    let started = false;
+
+    for (const wb of weeklyBreakdown) {
+      const pr = wb.player_results[playerName];
+      if (!pr) {
+        if (started) break;
+        continue;
+      }
+
+      const matchingPicks = mode === 'wins' ? pr.wins : pr.losses;
+      const opposingPicks = mode === 'wins' ? pr.losses : pr.wins;
+
+      if (!started && matchingPicks === 0) {
+        continue;
+      }
+
+      if (matchingPicks === 0 || opposingPicks > 0) {
+        break;
+      }
+
+      started = true;
+      rounds++;
+      picksCovered += matchingPicks;
+
+      if (picksCovered >= targetPickCount) {
+        break;
+      }
+    }
+
+    return Math.max(rounds, Math.ceil(targetPickCount / MAX_SELECTIONS_PER_PLAYER));
+  };
+
+  const insights = [
+    hottestStreak && hottestStreak.current_streak > 1
+      ? {
+          title: 'Hottest Streak',
+          value: `${hottestStreak.current_streak} pick wins`,
+          detail: `${hottestStreak.player_name} is on a proper heater: ${hottestStreak.current_streak} straight picks across ${getRoundSpanForPickStreak(hottestStreak.player_name, 'wins', hottestStreak.current_streak)} round${getRoundSpanForPickStreak(hottestStreak.player_name, 'wins', hottestStreak.current_streak) === 1 ? '' : 's'}.`,
+          tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+        }
+      : leader
+      ? {
+          title: 'Top Dog',
+          value: `${leader.win_rate}% win rate`,
+          detail: `${leader.player_name} is setting the pace right now.`,
+          tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
+        }
+      : null,
+    coldestRun && coldestRun.losses > 1
+      ? {
+          title: 'Coldest Streak',
+          value: `${coldestRun.losses} pick losses`,
+          detail: `${coldestRun.player_name} is in a rut: ${coldestRun.losses} straight losses across ${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.losses)} round${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.losses) === 1 ? '' : 's'}.`,
+          tone: 'text-red-300 border-red-500/30 bg-red-500/10',
+        }
+      : null,
+    goalMachine && goalMachine.avg_goals > 0
+      ? {
+          title: 'Goal Machine',
+          value: `${goalMachine.avg_goals.toFixed(1)} goals avg`,
+          detail: `${goalMachine.player_name}'s picks are serving chaos.`,
+          tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10',
+        }
+      : null,
+    fineMagnet && fineMagnet.outstanding_fines > 0
+      ? {
+          title: 'Fine Magnet',
+          value: `£${fineMagnet.outstanding_fines.toFixed(0)} owed`,
+          detail: `${fineMagnet.player_name} is carrying the biggest tab.`,
+          tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    title: string;
+    value: string;
+    detail: string;
+    tone: string;
+  }>;
+
   return (
     <div className="space-y-4">
       <div className="card">
@@ -124,6 +223,35 @@ export default function StatsPage() {
           </button>
         </div>
       </div>
+
+      {insights.length > 0 && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base font-semibold text-white">🔎 Insights</h2>
+              <p className="text-slate-400 text-xs mt-1">The standout stat lines at a glance</p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {insights.map((insight) => (
+              <div
+                key={insight.title}
+                className={`rounded-xl border p-3 ${insight.tone}`}
+              >
+                <div className="text-[10px] uppercase tracking-[0.18em] opacity-80">
+                  {insight.title}
+                </div>
+                <div className="mt-1 text-lg font-bold text-white">
+                  {insight.value}
+                </div>
+                <p className="mt-1 text-xs text-slate-300">
+                  {insight.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Leaderboard */}
       <div className="card">

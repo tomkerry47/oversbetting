@@ -2,34 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
-
-function toLeagueCode(leagueNameRaw: string | null | undefined): string {
-  const leagueName = String(leagueNameRaw || '').trim();
-  const knownCodes: Record<string, string> = {
-    'Premier League': 'pl',
-    Championship: 'champ',
-    'League One': 'l1',
-    'League Two': 'l2',
-    'National League': 'nl',
-    'Scottish Premiership': 'spl',
-    'Scottish Championship': 'schamp',
-    'Scottish League One': 'sl1',
-    'Scottish League Two': 'sl2',
-    'FA Cup': 'fac',
-    'Scottish Cup': 'sc'
-  };
-
-  if (knownCodes[leagueName]) return knownCodes[leagueName];
-
-  // Fallback for unexpected league names: short lowercase initials.
-  const initials = leagueName
-    .split(/\s+/)
-    .map((part) => part.replace(/[^A-Za-z0-9]/g, ''))
-    .filter(Boolean)
-    .map((part) => part[0]?.toLowerCase())
-    .join('');
-  return initials || 'lg';
-}
+import { toLeagueCode } from '@/lib/utils';
 
 /**
  * GET /api/selections - Get all selections for the current active week.
@@ -203,11 +176,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Check if all selections are now complete (4 players × 2 selections = 8)
+    // Re-read the saved state before checking completion so the webhook decision
+    // is based on what is actually persisted, not just the insert response.
     const { data: allSelections } = await supabase
       .from('selections')
-      .select('*')
-      .eq('week_id', week_id);
+      .select('*, fixture:fixtures(*)')
+      .eq('week_id', week_id)
+      .order('player_name', { ascending: true })
+      .order('created_at', { ascending: true });
 
     const playersWithCompleteSelections = PLAYERS.filter((player) => {
       const playerSelections = (allSelections || []).filter((selection: any) => selection.player_name === player);
@@ -218,6 +194,10 @@ export async function POST(request: NextRequest) {
     if (playersWithCompleteSelections.length === PLAYERS.length) {
       // All selections complete - trigger webhook
       await triggerWebhook(week_id, week, allSelections || []);
+    } else {
+      console.log(
+        `[Selections] Webhook not triggered for week ${week_id}: ${playersWithCompleteSelections.length}/${PLAYERS.length} players complete`
+      );
     }
 
     return NextResponse.json({ selections });

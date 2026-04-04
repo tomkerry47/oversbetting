@@ -127,12 +127,34 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Get weekly breakdown
-    const { data: weeks } = await supabase
-      .from('weeks')
-      .select('*')
-      .order('target_date', { ascending: false })
-      .order('target_kickoff_time', { ascending: false });
+    // Get weekly breakdown: completed rounds plus only the nearest active round.
+    const [activeWeeksResponse, completedWeeksResponse] = await Promise.all([
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'active')
+        .order('target_date', { ascending: true })
+        .order('target_kickoff_time', { ascending: true })
+        .limit(1),
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'completed')
+        .order('target_date', { ascending: false })
+        .order('target_kickoff_time', { ascending: false }),
+    ]);
+
+    if (activeWeeksResponse.error) {
+      throw activeWeeksResponse.error;
+    }
+    if (completedWeeksResponse.error) {
+      throw completedWeeksResponse.error;
+    }
+
+    const weeks = [
+      ...(activeWeeksResponse.data || []),
+      ...(completedWeeksResponse.data || []),
+    ];
 
     const weeklyBreakdown = [];
     for (const week of weeks || []) {

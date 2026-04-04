@@ -18,7 +18,7 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: 
   const started = Date.now();
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, { cache: 'no-store', ...init, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     console.log(`[Picks] ${url} -> ${response.status} in ${Date.now() - started}ms`);
     return { response, data };
@@ -140,6 +140,45 @@ export default function HomePage() {
     }
   }, []);
 
+  const hydrateRoundFromFixtures = useCallback(async (query: RoundQuery) => {
+    const maxFixturePolls = 8;
+    const fixturesUrl = getFixturesUrl(query);
+
+    for (let attempt = 0; attempt < maxFixturePolls; attempt++) {
+      const cacheBust = `${fixturesUrl}${fixturesUrl.includes('?') ? '&' : '?'}t=${Date.now()}-${attempt}`;
+      const { response: fixturesRes, data: fixturesData } = await fetchJsonWithTimeout(
+        cacheBust,
+        undefined,
+        20000
+      );
+
+      if (!fixturesRes.ok) {
+        setError(fixturesData.error || 'Failed to load fixtures');
+        return false;
+      }
+
+      const fixtureCount = fixturesData.fixtures?.length || 0;
+      setWeek(fixturesData.week || null);
+      setFixtures(fixturesData.fixtures || []);
+
+      if (fixturesData.week?.id) {
+        await loadSelectionsForWeek(fixturesData.week.id);
+      }
+
+      if (fixtureCount > 0 || attempt === maxFixturePolls - 1) {
+        await loadRounds();
+        setLoadingMessage(`Fixture sync completed: ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
+        setTimeout(() => setLoadingMessage(''), 5000);
+        return fixtureCount > 0;
+      }
+
+      setLoadingMessage('Workflow finished. Waiting for fixtures to appear...');
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    return false;
+  }, [getFixturesUrl, loadRounds, loadSelectionsForWeek]);
+
   const triggerFixtureSync = useCallback(async (query: RoundQuery) => {
     setRefreshing(true);
     setError(null);
@@ -208,19 +247,8 @@ export default function HomePage() {
             return false;
           }
 
-          const fixturesRes = await fetch(getFixturesUrl(query));
-          const fixturesData = await fixturesRes.json();
-          const fixtureCount = fixturesData.fixtures?.length || 0;
-
-          setWeek(fixturesData.week);
-          setFixtures(fixturesData.fixtures || []);
-          if (fixturesData.week?.id) {
-            await loadSelectionsForWeek(fixturesData.week.id);
-          }
-          await loadRounds();
-          setLoadingMessage(`Fixture sync completed: ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
-          setTimeout(() => setLoadingMessage(''), 5000);
-          return true;
+          const loaded = await hydrateRoundFromFixtures(query);
+          return loaded;
         }
       }
 
@@ -234,7 +262,7 @@ export default function HomePage() {
     } finally {
       setRefreshing(false);
     }
-  }, [getFixturesUrl, loadRounds, loadSelectionsForWeek, week]);
+  }, [hydrateRoundFromFixtures, week]);
 
   useEffect(() => {
     fetchData(activeQuery);

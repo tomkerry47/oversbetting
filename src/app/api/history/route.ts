@@ -2,6 +2,60 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
 
+async function getVisibleHistoryWeeks() {
+  try {
+    const [activeResponse, completedResponse] = await Promise.all([
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'active')
+        .order('target_date', { ascending: true })
+        .order('target_kickoff_time', { ascending: true })
+        .limit(1),
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'completed')
+        .order('target_date', { ascending: false })
+        .order('target_kickoff_time', { ascending: false }),
+    ]);
+
+    if (activeResponse.error) throw activeResponse.error;
+    if (completedResponse.error) throw completedResponse.error;
+
+    return normalizeWeeks([
+      ...(activeResponse.data || []),
+      ...(completedResponse.data || []),
+    ]);
+  } catch (error) {
+    if (!isMissingWeekColumnError(error)) {
+      throw error;
+    }
+
+    const [activeFallback, completedFallback] = await Promise.all([
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'active')
+        .order('saturday_date', { ascending: true })
+        .limit(1),
+      supabase
+        .from('weeks')
+        .select('*')
+        .eq('status', 'completed')
+        .order('saturday_date', { ascending: false }),
+    ]);
+
+    if (activeFallback.error) throw activeFallback.error;
+    if (completedFallback.error) throw completedFallback.error;
+
+    return normalizeWeeks([
+      ...(activeFallback.data || []),
+      ...(completedFallback.data || []),
+    ]);
+  }
+}
+
 /**
  * GET /api/history - Get completed weeks with full selections and results.
  */
@@ -32,32 +86,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ week: normalizeWeek(week), selections, fines });
     }
 
-    // All weeks (both active and completed)
-    let weeks;
-    try {
-      const response = await supabase
-        .from('weeks')
-        .select('*')
-        .in('status', ['active', 'completed'])
-        .order('target_date', { ascending: false })
-        .order('target_kickoff_time', { ascending: false });
-      if (response.error) throw response.error;
-      weeks = response.data;
-    } catch (error) {
-      if (isMissingWeekColumnError(error)) {
-        const fallback = await supabase
-          .from('weeks')
-          .select('*')
-          .in('status', ['active', 'completed'])
-          .order('saturday_date', { ascending: false });
-        if (fallback.error) throw fallback.error;
-        weeks = fallback.data;
-      } else {
-        throw error;
-      }
-    }
-
-    return NextResponse.json({ weeks: normalizeWeeks(weeks) });
+    const weeks = await getVisibleHistoryWeeks();
+    return NextResponse.json({ weeks });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
