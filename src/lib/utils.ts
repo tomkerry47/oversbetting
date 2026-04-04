@@ -1,5 +1,6 @@
-import { format, nextSaturday, previousSaturday, isSaturday, isSunday, isAfter, startOfDay } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { addHours, format, isSaturday, isSunday, nextSaturday } from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+import { Week } from '@/types';
 
 const UK_TZ = 'Europe/London';
 
@@ -48,12 +49,22 @@ export function getRelevantSaturday(weekOffset: number = 0): string {
 }
 
 /**
- * Check if results checking is allowed (after 17:00 UK time on Saturday).
+ * Get the Saturday anchor date for any target date.
+ * Sunday is treated as the start of the next game week.
  */
-export function canCheckResults(): boolean {
-  const now = getUKNow();
-  if (!isSaturday(now)) return false;
-  return now.getHours() >= 17;
+export function getSaturdayForTargetDate(targetDate: string): string {
+  const date = new Date(`${targetDate}T12:00:00`);
+
+  let saturday: Date;
+  if (isSaturday(date)) {
+    saturday = date;
+  } else if (isSunday(date)) {
+    saturday = nextSaturday(date);
+  } else {
+    saturday = nextSaturday(date);
+  }
+
+  return format(saturday, 'yyyy-MM-dd');
 }
 
 /**
@@ -68,6 +79,34 @@ export function isResetDay(): boolean {
  */
 export function formatDate(date: string): string {
   return format(new Date(date), 'dd MMM yyyy');
+}
+
+export function normalizeKickoffTime(kickoffTime: string): string {
+  const trimmed = String(kickoffTime || '').trim();
+  const match = trimmed.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return trimmed;
+
+  const [, hours, minutes, seconds] = match;
+  return `${hours}:${minutes}:${seconds || '00'}`;
+}
+
+export function formatKickoffTimeLabel(kickoffTime: string): string {
+  const normalized = normalizeKickoffTime(kickoffTime);
+  return normalized.length >= 5 ? normalized.slice(0, 5) : normalized;
+}
+
+export function formatRoundLabel(week: Pick<Week, 'week_number' | 'is_custom'>): string {
+  return `Week ${week.week_number}${week.is_custom ? '.5' : ''}`;
+}
+
+export function getRoundResultsAvailableAt(targetDate: string, kickoffTime: string): Date {
+  const normalizedTime = formatKickoffTimeLabel(kickoffTime);
+  const kickoffUtc = fromZonedTime(`${targetDate}T${normalizedTime}:00`, UK_TZ);
+  return addHours(kickoffUtc, 2);
+}
+
+export function canCheckResultsForWeek(week: Pick<Week, 'target_date' | 'target_kickoff_time'>): boolean {
+  return new Date() >= getRoundResultsAvailableAt(week.target_date, week.target_kickoff_time);
 }
 
 /**

@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Week } from '@/types';
+import { getRoundResultsAvailableAt } from '@/lib/utils';
 
 interface ResultsCheckerProps {
   onResultsChecked: () => Promise<void>;
   hasSelections: boolean;
   weekId?: number;
+  week?: Pick<Week, 'target_date' | 'target_kickoff_time'>;
 }
 
-export default function ResultsChecker({ onResultsChecked, hasSelections, weekId }: ResultsCheckerProps) {
+export default function ResultsChecker({ onResultsChecked, hasSelections, weekId, week }: ResultsCheckerProps) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canCheck, setCanCheck] = useState(false);
@@ -16,35 +19,31 @@ export default function ResultsChecker({ onResultsChecked, hasSelections, weekId
 
   useEffect(() => {
     const checkTime = () => {
-      const now = new Date();
-      // Create a UK time check
-      const ukTime = new Date(
-        now.toLocaleString('en-US', { timeZone: 'Europe/London' })
-      );
-      const day = ukTime.getDay(); // 0=Sun, 6=Sat
-      const hour = ukTime.getHours();
-
-      if (day === 6 && hour >= 17) {
-        // Saturday after 17:00
+      if (!week) {
         setCanCheck(true);
         setTimeUntilCheck('');
-      } else if (day === 6 && hour < 17) {
-        // Saturday before 17:00
-        const hoursLeft = 16 - hour;
-        const minsLeft = 59 - ukTime.getMinutes();
-        setCanCheck(false);
-        setTimeUntilCheck(`${hoursLeft}h ${minsLeft}m until results`);
-      } else {
-        // Any other day - allow checking for testing & late checks
-        setCanCheck(true);
-        setTimeUntilCheck('');
+        return;
       }
+
+      const availableAt = getRoundResultsAvailableAt(week.target_date, week.target_kickoff_time);
+      const diffMs = availableAt.getTime() - Date.now();
+      if (diffMs <= 0) {
+        setCanCheck(true);
+        setTimeUntilCheck('');
+        return;
+      }
+
+      const totalMinutes = Math.ceil(diffMs / 60000);
+      const hoursLeft = Math.floor(totalMinutes / 60);
+      const minsLeft = totalMinutes % 60;
+      setCanCheck(false);
+      setTimeUntilCheck(`${hoursLeft}h ${minsLeft}m until results`);
     };
 
     checkTime();
     const interval = setInterval(checkTime, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [week]);
 
   const handleCheck = async () => {
     setChecking(true);

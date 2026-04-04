@@ -104,3 +104,21 @@ body {
 .fixture-selected {
   @apply ring-2 ring-emerald-500 bg-emerald-900/30;
 }
+
+.picker-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(71 85 105 / 1);
+  background: rgb(15 23 42 / 0.85);
+  color: rgb(255 255 255 / 1);
+  padding: 0.65rem 0.8rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color-scheme: dark;
+}
+
+.picker-input:focus {
+  outline: none;
+  border-color: rgb(16 185 129 / 1);
+  box-shadow: 0 0 0 1px rgb(16 185 129 / 0.35);
+}

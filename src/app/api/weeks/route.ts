@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getRelevantSaturday, calculateWeekNumber } from '@/lib/utils';
-import { getCurrentSeason } from '@/lib/football-api';
+import { isMissingWeekColumnError, normalizeWeek, normalizeWeeks } from '@/lib/week-compat';
 
 /**
  * GET /api/weeks - Get all weeks or the current active week.
@@ -12,27 +11,59 @@ export async function GET(request: NextRequest) {
     const active = url.searchParams.get('active');
 
     if (active === 'true') {
-      const { data: week } = await supabase
+      let week;
+      try {
+        const response = await supabase
+          .from('weeks')
+          .select('*')
+          .eq('status', 'active')
+          .order('target_date', { ascending: false })
+          .order('target_kickoff_time', { ascending: false })
+          .limit(1)
+          .single();
+        if (response.error) throw response.error;
+        week = response.data;
+      } catch (error) {
+        if (isMissingWeekColumnError(error)) {
+          const fallback = await supabase
+            .from('weeks')
+            .select('*')
+            .eq('status', 'active')
+            .order('saturday_date', { ascending: false })
+            .limit(1)
+            .single();
+          week = fallback.data;
+        } else {
+          throw error;
+        }
+      }
+
+      return NextResponse.json({ week: normalizeWeek(week) });
+    }
+
+    let weeks;
+    try {
+      const response = await supabase
         .from('weeks')
         .select('*')
-        .eq('status', 'active')
-        .order('saturday_date', { ascending: false })
-        .limit(1)
-        .single();
-
-      return NextResponse.json({ week });
+        .order('target_date', { ascending: false })
+        .order('target_kickoff_time', { ascending: false });
+      if (response.error) throw response.error;
+      weeks = response.data;
+    } catch (caughtError) {
+      if (isMissingWeekColumnError(caughtError)) {
+        const fallback = await supabase
+          .from('weeks')
+          .select('*')
+          .order('saturday_date', { ascending: false });
+        if (fallback.error) throw fallback.error;
+        weeks = fallback.data;
+      } else {
+        throw caughtError;
+      }
     }
 
-    const { data: weeks, error } = await supabase
-      .from('weeks')
-      .select('*')
-      .order('saturday_date', { ascending: false });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ weeks: weeks || [] });
+    return NextResponse.json({ weeks: normalizeWeeks(weeks) });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -43,11 +74,20 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Mark all active weeks as completed
-    const { error: updateError } = await supabase
+    const body = await request.json().catch(() => ({}));
+    const weekId = body?.week_id;
+
+    let query = supabase
       .from('weeks')
-      .update({ status: 'completed' })
-      .eq('status', 'active');
+      .update({ status: 'completed' });
+
+    if (weekId) {
+      query = query.eq('id', weekId);
+    } else {
+      query = query.eq('status', 'active');
+    }
+
+    const { error: updateError } = await query;
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });

@@ -1,4 +1,5 @@
 import { APIFixture } from '@/types';
+import { formatKickoffTimeLabel } from './utils';
 
 // Using SofaScore unofficial API (free, no key needed)
 const API_BASE = 'https://api.sofascore.com/api/v1';
@@ -118,12 +119,13 @@ async function apiRequest(endpoint: string, retries = 3) {
 }
 
 /**
- * Fetch Saturday 15:00 BST/GMT kick-offs for all tracked leagues on a given date.
+ * Fetch kick-offs for all tracked leagues on a given date/time (UK local time).
  */
-export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]> {
+export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00'): Promise<APIFixture[]> {
   const allFixtures: APIFixture[] = [];
+  const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
   
-  console.log(`Fetching fixtures for ${date}`);
+  console.log(`Fetching fixtures for ${date} at ${targetKickoffTime}`);
 
   try {
     // Fetch all fixtures for the date (single API call)
@@ -157,8 +159,8 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
         hour12: false,
       });
 
-      // Only include 15:00 kick-offs
-      if (ukTime !== '15:00') {
+      // Only include matching UK kick-offs
+      if (ukTime !== targetKickoffTime) {
         continue;
       }
 
@@ -198,7 +200,7 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
       });
     }
 
-    console.log(`Total 15:00 fixtures for ${date}: ${allFixtures.length}`);
+    console.log(`Total ${targetKickoffTime} fixtures for ${date}: ${allFixtures.length}`);
     
     // Log league breakdown
     const leagueCounts = allFixtures.reduce((acc, f) => {
@@ -209,9 +211,13 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
 
     return allFixtures;
   } catch (err) {
-    console.error('Error fetching Saturday fixtures:', err);
+    console.error('Error fetching slot fixtures:', err);
     return [];
   }
+}
+
+export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]> {
+  return fetchFixturesForSlot(date, '15:00');
 }
 
 /**
@@ -293,8 +299,8 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
 /**
  * Get the current season year string.
  */
-export function getCurrentSeason(): string {
-  const now = new Date();
+export function getCurrentSeason(dateInput?: string | Date): string {
+  const now = dateInput ? new Date(dateInput) : new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   // Football season starts in August

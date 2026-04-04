@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
 
 /**
  * GET /api/history - Get completed weeks with full selections and results.
@@ -28,17 +29,35 @@ export async function GET(request: NextRequest) {
         .select('*')
         .eq('week_id', parseInt(weekId));
 
-      return NextResponse.json({ week, selections, fines });
+      return NextResponse.json({ week: normalizeWeek(week), selections, fines });
     }
 
     // All weeks (both active and completed)
-    const { data: weeks } = await supabase
-      .from('weeks')
-      .select('*')
-      .in('status', ['active', 'completed'])
-      .order('saturday_date', { ascending: false });
+    let weeks;
+    try {
+      const response = await supabase
+        .from('weeks')
+        .select('*')
+        .in('status', ['active', 'completed'])
+        .order('target_date', { ascending: false })
+        .order('target_kickoff_time', { ascending: false });
+      if (response.error) throw response.error;
+      weeks = response.data;
+    } catch (error) {
+      if (isMissingWeekColumnError(error)) {
+        const fallback = await supabase
+          .from('weeks')
+          .select('*')
+          .in('status', ['active', 'completed'])
+          .order('saturday_date', { ascending: false });
+        if (fallback.error) throw fallback.error;
+        weeks = fallback.data;
+      } else {
+        throw error;
+      }
+    }
 
-    return NextResponse.json({ weeks: weeks || [] });
+    return NextResponse.json({ weeks: normalizeWeeks(weeks) });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { PlayerStats, PLAYERS } from '@/types';
+import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
 interface WeeklyBreakdown {
   week: {
     id: number;
     week_number: number;
-    saturday_date: string;
+    target_date: string;
+    target_kickoff_time: string;
+    is_custom: boolean;
     status: string;
   };
   selections: Array<{
@@ -254,13 +257,13 @@ export default function StatsPage() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-medium text-white text-sm">
-                    Week {wb.week.week_number}
+                    {formatRoundLabel(wb.week)}
                   </h3>
                   <span className="text-slate-400 text-[10px]">
-                    {new Date(wb.week.saturday_date).toLocaleDateString('en-GB', {
+                    {new Date(wb.week.target_date).toLocaleDateString('en-GB', {
                       day: 'numeric',
                       month: 'short',
-                    })}
+                    })} • {formatKickoffTimeLabel(wb.week.target_kickoff_time)}
                   </span>
                 </div>
 

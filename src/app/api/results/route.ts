@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { GOAL_THRESHOLD } from '@/types';
+import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 
 /**
  * POST /api/results - Check results for the current week's selections.
@@ -29,21 +30,41 @@ export async function POST(request: NextRequest) {
       week = data;
     } else {
       // Get active week
-      const { data } = await supabase
-        .from('weeks')
-        .select('*')
-        .eq('status', 'active')
-        .order('saturday_date', { ascending: false })
-        .limit(1)
-        .single();
-      week = data;
+      try {
+        const response = await supabase
+          .from('weeks')
+          .select('*')
+          .eq('status', 'active')
+          .order('target_date', { ascending: false })
+          .order('target_kickoff_time', { ascending: false })
+          .limit(1)
+          .single();
+        if (response.error) throw response.error;
+        week = response.data;
+      } catch (error) {
+        if (isMissingWeekColumnError(error)) {
+          const fallback = await supabase
+            .from('weeks')
+            .select('*')
+            .eq('status', 'active')
+            .order('saturday_date', { ascending: false })
+            .limit(1)
+            .single();
+          if (fallback.error) throw fallback.error;
+          week = fallback.data;
+        } else {
+          throw error;
+        }
+      }
     }
+
+    week = normalizeWeek(week);
 
     if (!week) {
       return NextResponse.json({ error: 'No week found' }, { status: 404 });
     }
 
-    console.log(`[Results] Checking results for week ${week.id} (${week.saturday_date})`);
+    console.log(`[Results] Checking results for week ${week.id} (${week.target_date} ${week.target_kickoff_time})`);
 
     // Get all fixtures for the week
     const { data: fixtures } = await supabase

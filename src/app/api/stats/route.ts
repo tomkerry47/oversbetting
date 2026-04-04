@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     // Get all selections with fixtures
     let selectionsQuery = supabase
       .from('selections')
-      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score), week:weeks!inner(saturday_date)')
+      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score), week:weeks!inner(target_date, target_kickoff_time, is_custom, week_number)')
       .order('created_at', { ascending: true });
 
     if (player) {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (dateCutoff) {
-      selectionsQuery = selectionsQuery.gte('week.saturday_date', dateCutoff);
+      selectionsQuery = selectionsQuery.gte('week.target_date', dateCutoff);
     }
 
     const { data: allSelections } = await selectionsQuery;
@@ -131,7 +131,8 @@ export async function GET(request: NextRequest) {
     const { data: weeks } = await supabase
       .from('weeks')
       .select('*')
-      .order('saturday_date', { ascending: false });
+      .order('target_date', { ascending: false })
+      .order('target_kickoff_time', { ascending: false });
 
     const weeklyBreakdown = [];
     for (const week of weeks || []) {

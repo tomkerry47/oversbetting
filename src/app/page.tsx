@@ -5,7 +5,11 @@ import FixtureSelector from '@/components/FixtureSelector';
 import SelectionsDisplay from '@/components/SelectionsDisplay';
 import WeeklyReset from '@/components/WeeklyReset';
 import { Fixture, Selection, Week, PLAYERS } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatKickoffTimeLabel, formatRoundLabel, getRelevantSaturday } from '@/lib/utils';
+
+type RoundQuery =
+  | { mode: 'standard'; weekOffset: number }
+  | { mode: 'custom'; targetDate: string; kickoffTime: string };
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {
   const controller = new AbortController();
@@ -24,7 +28,6 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: 
 
 export default function HomePage() {
   const [week, setWeek] = useState<Week | null>(null);
-  const [currentWeekNumber, setCurrentWeekNumber] = useState<number | null>(null);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,13 +35,21 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('Loading fixtures...');
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, 1 = next week, etc.
+  const [activeQuery, setActiveQuery] = useState<RoundQuery>({ mode: 'standard', weekOffset: 0 });
+  const [customDate, setCustomDate] = useState(getRelevantSaturday(0));
+  const [customKickoffTime, setCustomKickoffTime] = useState('19:45');
+  const [showCustomRoundMenu, setShowCustomRoundMenu] = useState(false);
 
-  const fetchData = useCallback(async (offset: number = 0) => {
+  const fetchData = useCallback(async (query: RoundQuery) => {
     try {
-      console.log(`[Picks] fetchData start (weekOffset=${offset})`);
+      const fixturesUrl = query.mode === 'custom'
+        ? `/api/fixtures?targetDate=${encodeURIComponent(query.targetDate)}&kickoffTime=${encodeURIComponent(query.kickoffTime)}`
+        : `/api/fixtures?weekOffset=${query.weekOffset}`;
+
+      console.log('[Picks] fetchData start', query);
       setLoadingMessage('Loading fixtures...');
       const { response: fixturesRes, data: fixturesData } = await fetchJsonWithTimeout(
-        `/api/fixtures?weekOffset=${offset}`,
+        fixturesUrl,
         undefined,
         20000
       );
@@ -56,15 +67,11 @@ export default function HomePage() {
       }
 
       const fixtureCount = fixturesData.fixtures?.length || 0;
-      setLoadingMessage(`Found ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''} at 15:00`);
+      const kickoffLabel = formatKickoffTimeLabel(fixturesData.week?.target_kickoff_time || (query.mode === 'custom' ? query.kickoffTime : '15:00'));
+      setLoadingMessage(`Found ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''} at ${kickoffLabel}`);
       
       setWeek(fixturesData.week);
       setFixtures(fixturesData.fixtures || []);
-      
-      // Store current week number on first load
-      if (currentWeekNumber === null && offset === 0) {
-        setCurrentWeekNumber(fixturesData.week?.week_number || null);
-      }
 
       // Fetch selections for this week
       if (fixturesData.week) {
@@ -80,7 +87,7 @@ export default function HomePage() {
         }
       }
       setLoadingMessage(''); // Always clear after load attempt
-      console.log(`[Picks] fetchData success (weekOffset=${offset})`);
+      console.log('[Picks] fetchData success', query);
     } catch (err) {
       console.error('[Picks] fetchData error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
@@ -92,55 +99,60 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [currentWeekNumber]);
+  }, []);
 
-  useEffect(() => {
-    fetchData(weekOffset);
-  }, [fetchData, weekOffset]);
+  const loadSelectionsForWeek = useCallback(async (weekId: number) => {
+    const { response: selectionsRes, data: selectionsData } = await fetchJsonWithTimeout(
+      `/api/selections?week_id=${weekId}`,
+      undefined,
+      20000
+    );
 
-  const handlePreviousWeek = () => {
-    if (weekOffset > 0) {
-      setWeekOffset(prev => prev - 1);
+    if (selectionsRes.ok) {
+      setSelections(selectionsData.selections || []);
+    } else {
+      console.error('[Picks] selections load failed:', selectionsData);
     }
-  };
+  }, []);
 
-  const handleNextWeek = () => {
-    setWeekOffset(prev => prev + 1);
-  };
+  const getFixturesUrl = useCallback((query: RoundQuery) => {
+    return query.mode === 'custom'
+      ? `/api/fixtures?targetDate=${encodeURIComponent(query.targetDate)}&kickoffTime=${encodeURIComponent(query.kickoffTime)}`
+      : `/api/fixtures?weekOffset=${query.weekOffset}`;
+  }, []);
 
-  const handleRefreshFixtures = async () => {
+  const triggerFixtureSync = useCallback(async (query: RoundQuery) => {
     setRefreshing(true);
     setError(null);
     setLoadingMessage('Triggering fixture sync job...');
+
     try {
-      const targetWeekOffset = Math.max(0, weekOffset);
       const triggerRes = await fetch('/api/fixtures/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekOffset: targetWeekOffset }),
+        body: JSON.stringify(
+          query.mode === 'custom'
+            ? { targetDate: query.targetDate, kickoffTime: query.kickoffTime }
+            : { weekOffset: Math.max(0, query.weekOffset) }
+        ),
       });
       const triggerData = await triggerRes.json();
-      
+
       if (!triggerRes.ok) {
         setError(triggerData.error || 'Failed to trigger fixture sync');
         setLoadingMessage('');
-        return;
-      }
-
-      if (weekOffset !== targetWeekOffset) {
-        setWeekOffset(targetWeekOffset);
+        return false;
       }
 
       const runId = triggerData.runId;
       if (!runId) {
         setLoadingMessage('Fixture sync started. Check back shortly for updates.');
         setTimeout(() => setLoadingMessage(''), 5000);
-        return;
+        return true;
       }
 
       setLoadingMessage('Fixture sync running in GitHub Actions...');
 
-      // Poll workflow status until completion (up to ~3 minutes).
       const maxStatusPolls = 36;
       for (let i = 0; i < maxStatusPolls; i++) {
         await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -150,41 +162,112 @@ export default function HomePage() {
         if (!statusRes.ok) {
           setError(statusData.error || 'Failed checking workflow status');
           setLoadingMessage('');
-          return;
+          return false;
         }
 
         if (statusData.status === 'completed') {
           if (statusData.conclusion !== 'success') {
             setError(`Fixture sync failed (${statusData.conclusion || 'unknown'})`);
             setLoadingMessage('');
-            return;
+            return false;
           }
 
-          const fixturesRes = await fetch(`/api/fixtures?weekOffset=${targetWeekOffset}`);
+          const fixturesRes = await fetch(getFixturesUrl(query));
           const fixturesData = await fixturesRes.json();
           const fixtureCount = fixturesData.fixtures?.length || 0;
 
           setWeek(fixturesData.week);
           setFixtures(fixturesData.fixtures || []);
-          if (fixturesData.week) {
-            const selectionsRes = await fetch(`/api/selections?week_id=${fixturesData.week.id}`);
-            const selectionsData = await selectionsRes.json();
-            setSelections(selectionsData.selections || []);
+          if (fixturesData.week?.id) {
+            await loadSelectionsForWeek(fixturesData.week.id);
           }
           setLoadingMessage(`Fixture sync completed: ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
           setTimeout(() => setLoadingMessage(''), 5000);
-          return;
+          return true;
         }
       }
 
       setLoadingMessage('Fixture sync is still running. Check back shortly.');
       setTimeout(() => setLoadingMessage(''), 5000);
+      return true;
     } catch (err) {
       setError('Network error, please try again');
       setLoadingMessage('');
+      return false;
     } finally {
       setRefreshing(false);
     }
+  }, [getFixturesUrl, loadSelectionsForWeek]);
+
+  useEffect(() => {
+    fetchData(activeQuery);
+  }, [fetchData, activeQuery]);
+
+  const handlePreviousWeek = () => {
+    if (weekOffset > 0) {
+      const nextOffset = weekOffset - 1;
+      setWeekOffset(nextOffset);
+      setActiveQuery({ mode: 'standard', weekOffset: nextOffset });
+    }
+  };
+
+  const handleNextWeek = () => {
+    const nextOffset = weekOffset + 1;
+    setWeekOffset(nextOffset);
+    setActiveQuery({ mode: 'standard', weekOffset: nextOffset });
+  };
+
+  const handleLoadCustomRound = async () => {
+    if (!customDate || !customKickoffTime) {
+      setError('Choose a date and kick-off time first');
+      return;
+    }
+
+    const nextQuery: RoundQuery = {
+      mode: 'custom',
+      targetDate: customDate,
+      kickoffTime: customKickoffTime,
+    };
+
+    setLoading(true);
+    setError(null);
+    setActiveQuery(nextQuery);
+
+    try {
+      const { response: fixturesRes, data: fixturesData } = await fetchJsonWithTimeout(
+        getFixturesUrl(nextQuery),
+        undefined,
+        20000
+      );
+
+      if (!fixturesRes.ok) {
+        setError(fixturesData.error || 'Failed to load fixtures');
+        return;
+      }
+
+      setWeek(fixturesData.week || null);
+      setFixtures(fixturesData.fixtures || []);
+      if (fixturesData.week?.id) {
+        await loadSelectionsForWeek(fixturesData.week.id);
+      }
+
+      if ((fixturesData.fixtures || []).length === 0) {
+        await triggerFixtureSync(nextQuery);
+      }
+    } catch (err) {
+      setError('Failed to load data. Check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToSaturday = () => {
+    setError(null);
+    setActiveQuery({ mode: 'standard', weekOffset });
+  };
+
+  const handleRefreshFixtures = async () => {
+    await triggerFixtureSync(activeQuery);
   };
 
   const existingSelections = PLAYERS.reduce<Record<string, number[]>>(
@@ -200,6 +283,11 @@ export default function HomePage() {
   const allPlayersPicked = PLAYERS.every(
     (p) => (existingSelections[p] || []).length > 0
   );
+
+  const isCustomRound = Boolean(week?.is_custom);
+  const roundLabel = week ? formatRoundLabel(week) : 'Week ?';
+  const roundDateLabel = week ? formatDate(week.target_date) : '...';
+  const roundKickoffLabel = week ? formatKickoffTimeLabel(week.target_kickoff_time) : '...';
 
   if (loading) {
     return (
@@ -232,17 +320,18 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePreviousWeek}
-                disabled={weekOffset === 0}
+                disabled={weekOffset === 0 || activeQuery.mode === 'custom'}
                 className="text-xl disabled:opacity-30 disabled:cursor-not-allowed hover:scale-110 transition-transform"
                 title="Previous week"
               >
                 ◀️
               </button>
               <h1 className="text-xl font-bold text-white">
-                ⚽ Week {week?.week_number || '?'}
+                ⚽ {roundLabel}
               </h1>
               <button
                 onClick={handleNextWeek}
+                disabled={activeQuery.mode === 'custom'}
                 className="text-xl hover:scale-110 transition-transform"
                 title="Next week"
               >
@@ -258,11 +347,73 @@ export default function HomePage() {
             </button>
           </div>
           <p className="text-slate-400 text-sm">
-            Sat {week ? formatDate(week.saturday_date) : '...'} • 15:00 KOs
+            {isCustomRound ? 'Custom' : 'Sat'} {roundDateLabel} • {roundKickoffLabel} KOs
           </p>
           <p className="text-emerald-400 text-xs">
             {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 2.5 goals to win 💰
           </p>
+          <div className="pt-1">
+            <button
+              onClick={() => setShowCustomRoundMenu((prev) => !prev)}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-600 bg-slate-900/40 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-white"
+            >
+              <span className={`transition-transform ${showCustomRoundMenu ? 'rotate-90' : ''}`}>▶</span>
+              Custom round
+            </button>
+          </div>
+          {showCustomRoundMenu && (
+            <div className="mt-2 rounded-xl border border-slate-700/80 bg-slate-900/45 p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <div className="rounded-xl border border-slate-700 bg-slate-800/80 p-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Date</p>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {customDate ? formatDate(customDate) : 'Choose date'}
+                  </div>
+                  <input
+                    type="date"
+                    value={customDate}
+                    onChange={(e) => {
+                      setCustomDate(e.target.value);
+                      e.currentTarget.blur();
+                    }}
+                    className="picker-input mt-2"
+                  />
+                </div>
+                <div className="rounded-xl border border-slate-700 bg-slate-800/80 p-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Kick-off</p>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {customKickoffTime || 'Choose time'}
+                  </div>
+                  <input
+                    type="time"
+                    value={customKickoffTime}
+                    onChange={(e) => {
+                      setCustomKickoffTime(e.target.value);
+                      e.currentTarget.blur();
+                    }}
+                    className="picker-input mt-2"
+                  />
+                </div>
+                <button
+                  onClick={handleLoadCustomRound}
+                  className="btn-secondary !py-2 whitespace-nowrap self-end"
+                >
+                  Load Week .5
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Create a quieter midweek round without leaving the main flow.
+              </p>
+            </div>
+          )}
+          {activeQuery.mode === 'custom' && (
+            <button
+              onClick={handleBackToSaturday}
+              className="text-xs text-blue-400 hover:text-blue-300 text-left"
+            >
+              Back to Saturday rounds
+            </button>
+          )}
           {loadingMessage && (
             <p className="text-blue-400 text-xs animate-pulse">
               {loadingMessage}
@@ -281,12 +432,12 @@ export default function HomePage() {
           fixtures={fixtures}
           weekId={week.id}
           existingSelections={existingSelections}
-          onSelectionSubmitted={() => fetchData(weekOffset)}
+          onSelectionSubmitted={() => fetchData(activeQuery)}
         />
       )}
 
       {/* Weekly Reset */}
-      {allPlayersPicked && <WeeklyReset onReset={fetchData} />}
+      {allPlayersPicked && week && <WeeklyReset weekId={week.id} onReset={() => fetchData(activeQuery)} />}
     </div>
   );
 }

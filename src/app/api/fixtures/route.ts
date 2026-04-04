@@ -1,9 +1,172 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchSaturdayFixtures } from '@/lib/football-api';
-import { getRelevantSaturday, calculateWeekNumber } from '@/lib/utils';
+import { fetchFixturesForSlot } from '@/lib/football-api';
+import { getRelevantSaturday, calculateWeekNumber, getSaturdayForTargetDate, normalizeKickoffTime } from '@/lib/utils';
 import { getCurrentSeason } from '@/lib/football-api';
 import { LEAGUE_IDS } from '@/types';
+import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
+
+function parseRoundQuery(searchParams: URLSearchParams) {
+  const targetDate = searchParams.get('targetDate');
+  const kickoffTime = searchParams.get('kickoffTime');
+  const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
+
+  if (targetDate && kickoffTime) {
+    const normalizedKickoffTime = normalizeKickoffTime(kickoffTime);
+    const saturdayDate = getSaturdayForTargetDate(targetDate);
+    return {
+      isCustom: true,
+      targetDate,
+      kickoffTime: normalizedKickoffTime,
+      saturdayDate,
+      season: getCurrentSeason(targetDate),
+      weekNumber: calculateWeekNumber(saturdayDate),
+      weekOffset: 0,
+    };
+  }
+
+  const saturdayDate = getRelevantSaturday(weekOffset);
+  return {
+    isCustom: false,
+    targetDate: saturdayDate,
+    kickoffTime: '15:00:00',
+    saturdayDate,
+    season: getCurrentSeason(saturdayDate),
+    weekNumber: calculateWeekNumber(saturdayDate),
+    weekOffset,
+  };
+}
+
+function isSaturdayDateUniqueConstraintError(error: unknown): boolean {
+  const message = String((error as { message?: string })?.message || error || '').toLowerCase();
+  return (
+    message.includes('duplicate key value violates unique constraint "weeks_saturday_date_key"') ||
+    message.includes('weeks_saturday_date_key')
+  );
+}
+
+async function getOrCreateWeek(searchParams: URLSearchParams) {
+  const round = parseRoundQuery(searchParams);
+
+  let week;
+  let weekError;
+  try {
+    const response = await supabase
+      .from('weeks')
+      .select('*')
+      .eq('season', round.season)
+      .eq('week_number', round.weekNumber)
+      .eq('is_custom', round.isCustom)
+      .single();
+    week = response.data;
+    weekError = response.error;
+  } catch (error: any) {
+    weekError = error;
+  }
+
+  if (weekError && weekError.code !== 'PGRST116') {
+    if (isMissingWeekColumnError(weekError)) {
+      if (round.isCustom) {
+        throw new Error('Custom rounds require the add_custom_rounds.sql Supabase migration before they can be used.');
+      }
+
+      const legacyResponse = await supabase
+        .from('weeks')
+        .select('*')
+        .eq('saturday_date', round.saturdayDate)
+        .single();
+
+      if (legacyResponse.error && legacyResponse.error.code !== 'PGRST116') {
+        throw new Error(legacyResponse.error.message);
+      }
+
+      if (legacyResponse.data) {
+        const normalizedLegacyWeek = normalizeWeek(legacyResponse.data);
+        if (!normalizedLegacyWeek) {
+          throw new Error('Failed to normalize legacy week');
+        }
+        return { week: normalizedLegacyWeek, round };
+      }
+
+      const { data: newWeek, error: createError } = await supabase
+        .from('weeks')
+        .upsert({
+          week_number: round.weekNumber,
+          season: round.season,
+          saturday_date: round.saturdayDate,
+          status: 'active',
+        }, {
+          onConflict: 'saturday_date',
+          ignoreDuplicates: false,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        throw new Error(createError.message);
+      }
+
+      const normalizedLegacyNewWeek = normalizeWeek(newWeek);
+      if (!normalizedLegacyNewWeek) {
+        throw new Error('Failed to create legacy week');
+      }
+      return { week: normalizedLegacyNewWeek, round };
+    }
+
+    throw new Error(weekError.message);
+  }
+
+  if (week) {
+    const normalizedWeek = normalizeWeek(week);
+    if (!normalizedWeek) {
+      throw new Error('Failed to normalize week');
+    }
+    const existingKickoff = normalizeKickoffTime(normalizedWeek?.target_kickoff_time || '15:00:00');
+    if (
+      round.isCustom &&
+      (normalizedWeek?.target_date !== round.targetDate || existingKickoff !== round.kickoffTime)
+    ) {
+      throw new Error(
+        `Week ${round.weekNumber}.5 already exists for ${normalizedWeek?.target_date} at ${existingKickoff.slice(0, 5)}`
+      );
+    }
+
+    return { week: normalizedWeek, round };
+  }
+
+  const { data: newWeek, error: createError } = await supabase
+    .from('weeks')
+    .upsert({
+      week_number: round.weekNumber,
+      season: round.season,
+      saturday_date: round.saturdayDate,
+      target_date: round.targetDate,
+      target_kickoff_time: round.kickoffTime,
+      is_custom: round.isCustom,
+      status: 'active',
+    }, {
+      onConflict: 'season,week_number,is_custom',
+      ignoreDuplicates: false,
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    if (isSaturdayDateUniqueConstraintError(createError)) {
+      throw new Error(
+        'Custom rounds need the drop_weeks_saturday_date_unique.sql Supabase migration before they can share a Saturday anchor with the main week.'
+      );
+    }
+    throw new Error(createError.message);
+  }
+
+  const normalizedNewWeek = normalizeWeek(newWeek);
+  if (!normalizedNewWeek) {
+    throw new Error('Failed to create week');
+  }
+
+  return { week: normalizedNewWeek, round };
+}
 
 /**
  * GET /api/fixtures - Get fixtures for the current week.
@@ -12,45 +175,7 @@ import { LEAGUE_IDS } from '@/types';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
-    
-    const saturdayDate = getRelevantSaturday(weekOffset);
-
-    // Get or create the week
-    let { data: week, error: weekError } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('saturday_date', saturdayDate)
-      .single();
-
-    if (weekError && weekError.code !== 'PGRST116') {
-      // PGRST116 = no rows returned, which is fine
-      return NextResponse.json({ error: weekError.message }, { status: 500 });
-    }
-
-    if (!week) {
-      const season = getCurrentSeason();
-      const weekNumber = calculateWeekNumber(saturdayDate);
-
-      const { data: newWeek, error: createError } = await supabase
-        .from('weeks')
-        .upsert({
-          week_number: weekNumber,
-          season: season,
-          saturday_date: saturdayDate,
-          status: 'active',
-        }, {
-          onConflict: 'saturday_date',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        return NextResponse.json({ error: createError.message }, { status: 500 });
-      }
-      week = newWeek;
-    }
+    const { week, round } = await getOrCreateWeek(searchParams);
 
     // Check if fixtures already exist for this week
     const { data: existingFixtures } = await supabase
@@ -66,11 +191,16 @@ export async function GET(request: NextRequest) {
 
     // No fixtures in DB - return empty array
     // User can use refresh button to fetch from API if needed
-    console.log(`No fixtures in DB for ${saturdayDate}. Use refresh button to fetch.`);
+    console.log(`No fixtures in DB for ${round.targetDate} ${round.kickoffTime}. Use refresh button to fetch.`);
     return NextResponse.json({ week, fixtures: [], message: 'No fixtures loaded yet. Click refresh to fetch from SofaScore.' });
   } catch (err: any) {
     console.error('Fixtures API error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const message = String(err?.message || '');
+    const status =
+      message.includes('already exists for') || message.includes('drop_weeks_saturday_date_unique.sql')
+        ? 409
+        : 500;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }
 
@@ -81,45 +211,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
-    
-    const saturdayDate = getRelevantSaturday(weekOffset);
-
-    // Get or create the week
-    let { data: week, error: weekError } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('saturday_date', saturdayDate)
-      .single();
-
-    if (weekError && weekError.code !== 'PGRST116') {
-      return NextResponse.json({ error: weekError.message }, { status: 500 });
-    }
-
-    if (!week) {
-      // Create the week if it doesn't exist
-      const season = getCurrentSeason();
-      const weekNumber = calculateWeekNumber(saturdayDate);
-
-      const { data: newWeek, error: createError } = await supabase
-        .from('weeks')
-        .upsert({
-          week_number: weekNumber,
-          season: season,
-          saturday_date: saturdayDate,
-          status: 'active',
-        }, {
-          onConflict: 'saturday_date',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
-
-      if (createError) {
-        return NextResponse.json({ error: createError.message }, { status: 500 });
-      }
-      week = newWeek;
-    }
+    const { week, round } = await getOrCreateWeek(searchParams);
 
     // Check for existing fixtures and rate limit
     const { data: existingFixtures } = await supabase
@@ -143,8 +235,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Fetching fixtures from API for ${saturdayDate}`);
-    const apiFixtures = await fetchSaturdayFixtures(saturdayDate);
+    console.log(`Fetching fixtures from API for ${round.targetDate} ${round.kickoffTime}`);
+    const apiFixtures = await fetchFixturesForSlot(round.targetDate, round.kickoffTime);
     console.log(`API returned ${apiFixtures.length} fixtures`);
 
     const fixtureRows = apiFixtures.map((f) => ({
@@ -178,6 +270,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ week, fixtures });
   } catch (err: any) {
     console.error('Fixtures refresh error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    const message = String(err?.message || '');
+    const status =
+      message.includes('already exists for') || message.includes('drop_weeks_saturday_date_unique.sql')
+        ? 409
+        : 500;
+    return NextResponse.json({ error: err.message }, { status });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
+import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 
 function toLeagueCode(leagueNameRaw: string | null | undefined): string {
   const leagueName = String(leagueNameRaw || '').trim();
@@ -48,19 +49,39 @@ export async function GET(request: NextRequest) {
       query = query.eq('week_id', parseInt(weekId));
     } else {
       // Get the active week
-      const { data: week } = await supabase
-        .from('weeks')
-        .select('*')
-        .eq('status', 'active')
-        .order('saturday_date', { ascending: false })
-        .limit(1)
-        .single();
+      let week;
+      try {
+        const response = await supabase
+          .from('weeks')
+          .select('*')
+          .eq('status', 'active')
+          .order('target_date', { ascending: false })
+          .order('target_kickoff_time', { ascending: false })
+          .limit(1)
+          .single();
+        if (response.error) throw response.error;
+        week = response.data;
+      } catch (error) {
+        if (isMissingWeekColumnError(error)) {
+          const fallback = await supabase
+            .from('weeks')
+            .select('*')
+            .eq('status', 'active')
+            .order('saturday_date', { ascending: false })
+            .limit(1)
+            .single();
+          if (fallback.error) throw fallback.error;
+          week = fallback.data;
+        } else {
+          throw error;
+        }
+      }
 
       if (!week) {
         return NextResponse.json({ selections: [], week: null });
       }
 
-      query = query.eq('week_id', week.id);
+      query = query.eq('week_id', normalizeWeek(week)?.id);
     }
 
     const { data: selections, error } = await query;
@@ -228,6 +249,9 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
       event: 'selections_complete',
       week_id: weekId,
       saturday_date: week.saturday_date,
+      target_date: week.target_date,
+      target_kickoff_time: week.target_kickoff_time,
+      is_custom: week.is_custom,
       total_selections: selections.length,
       players_submitted: PLAYERS.length,
       selections: fullSelections,
@@ -251,7 +275,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
     const messageLines: string[] = [];
     messageLines.push('🎲 All Selections In! 🎲');
     messageLines.push('');
-    messageLines.push(`📅 Saturday: ${new Date(week.saturday_date).toLocaleDateString('en-GB')}`);
+    messageLines.push(`📅 Round: ${new Date(week.target_date).toLocaleDateString('en-GB')} ${String(week.target_kickoff_time).slice(0, 5)}`);
     messageLines.push('');
     messageLines.push('⚽ Picks:');
     messageLines.push('');

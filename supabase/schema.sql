@@ -12,11 +12,17 @@ CREATE TABLE weeks (
   id              SERIAL PRIMARY KEY,
   week_number     INT NOT NULL,
   season          TEXT NOT NULL DEFAULT '2025-26',
-  saturday_date   DATE NOT NULL UNIQUE,
+  saturday_date   DATE NOT NULL,
+  target_date     DATE NOT NULL,
+  target_kickoff_time TIME NOT NULL DEFAULT '15:00:00',
+  is_custom       BOOLEAN NOT NULL DEFAULT FALSE,
   status          TEXT NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active', 'completed')),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (season, week_number, is_custom)
 );
+
+CREATE INDEX idx_weeks_saturday_date ON weeks(saturday_date);
 
 -- ============================================================
 -- FIXTURES: Saturday 15:00 fixtures from the API

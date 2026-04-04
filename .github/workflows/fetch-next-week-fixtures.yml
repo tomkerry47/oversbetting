@@ -7,6 +7,12 @@ on:
         description: "Week offset from current UK week (0=current, 1=next)"
         required: true
         default: "1"
+      target_date:
+        description: "Optional explicit target date (YYYY-MM-DD) for custom rounds"
+        required: false
+      kickoff_time:
+        description: "Optional explicit UK kickoff time (HH:MM or HH:MM:SS) for custom rounds"
+        required: false
 
 jobs:
   sync-fixtures:
@@ -28,7 +34,13 @@ jobs:
           pip install -r scripts/requirements-tls.txt
 
       - name: Fetch and upsert fixtures
-        run: python scripts/fetch-fixtures-tls.py --weekOffset=${{ github.event.inputs.week_offset }}
+        run: |
+          ARGS="--weekOffset=${{ github.event.inputs.week_offset }}"
+          if [ -n "${{ github.event.inputs.target_date }}" ] && [ -n "${{ github.event.inputs.kickoff_time }}" ]; then
+            ARGS="$ARGS --targetDate=${{ github.event.inputs.target_date }} --kickoffTime=${{ github.event.inputs.kickoff_time }}"
+          fi
+          echo "Running: python scripts/fetch-fixtures-tls.py $ARGS"
+          python scripts/fetch-fixtures-tls.py $ARGS
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

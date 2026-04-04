@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Week, Selection, Fine, PLAYERS } from '@/types';
+import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
 export default function HistoryPage() {
   const [weeks, setWeeks] = useState<Week[]>([]);
@@ -116,7 +117,7 @@ export default function HistoryPage() {
       <div className="card">
         <h1 className="text-xl font-bold text-white">📅 History</h1>
         <p className="text-slate-400 text-xs mt-1">
-          {weeks.length} completed week{weeks.length !== 1 ? 's' : ''}
+          {weeks.length} saved round{weeks.length !== 1 ? 's' : ''}
         </p>
         {checkError && (
           <p className="text-red-400 text-xs mt-2">❌ {checkError}</p>
@@ -143,8 +144,8 @@ export default function HistoryPage() {
                 <div onClick={() => loadWeekDetails(week.id)}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-base font-semibold text-white">
-                        Week {week.week_number}
+                        <h3 className="text-base font-semibold text-white">
+                        {formatRoundLabel(week)}
                         {week.status === 'active' && (
                           <span className="text-xs text-emerald-400 ml-2">● Active</span>
                         )}
@@ -153,11 +154,11 @@ export default function HistoryPage() {
                         )}
                       </h3>
                       <p className="text-slate-400 text-xs">
-                        {new Date(week.saturday_date).toLocaleDateString('en-GB', {
+                        {new Date(week.target_date).toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric',
-                        })}
+                        })} • {formatKickoffTimeLabel(week.target_kickoff_time)}
                       </p>
                     </div>
                     <span className="text-2xl transition-transform duration-200"

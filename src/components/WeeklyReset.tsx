@@ -3,17 +3,22 @@
 import { useState } from 'react';
 
 interface WeeklyResetProps {
+  weekId: number;
   onReset: () => void;
 }
 
-export default function WeeklyReset({ onReset }: WeeklyResetProps) {
+export default function WeeklyReset({ weekId, onReset }: WeeklyResetProps) {
   const [resetting, setResetting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const handleReset = async () => {
     setResetting(true);
     try {
-      const res = await fetch('/api/weeks', { method: 'POST' });
+      const res = await fetch('/api/weeks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_id: weekId }),
+      });
       if (res.ok) {
         onReset();
         setShowConfirm(false);
@@ -31,7 +36,7 @@ export default function WeeklyReset({ onReset }: WeeklyResetProps) {
         <div>
           <h3 className="text-base font-semibold text-amber-400">🔄 New Week</h3>
           <p className="text-slate-400 text-xs mt-1">
-            Reset to start picking for next Saturday
+            Mark this round complete and move on
           </p>
         </div>
         {!showConfirm ? (

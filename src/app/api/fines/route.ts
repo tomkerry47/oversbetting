@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('fines')
-      .select('*, week:weeks(saturday_date, week_number)')
+      .select('*, week:weeks(saturday_date, target_date, target_kickoff_time, week_number, is_custom)')
       .order('created_at', { ascending: false });
 
     if (player) query = query.eq('player_name', player);

@@ -31,6 +31,9 @@ export interface Week {
   week_number: number;
   season: string;
   saturday_date: string;
+  target_date: string;
+  target_kickoff_time: string;
+  is_custom: boolean;
   status: 'active' | 'completed';
   created_at: string;
 }

@@ -53,6 +53,8 @@ STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--weekOffset", type=int, default=1, help="0=current week, 1=next week")
+    parser.add_argument("--targetDate", type=str, help="Explicit target date in YYYY-MM-DD format")
+    parser.add_argument("--kickoffTime", type=str, help="Explicit UK kickoff time in HH:MM or HH:MM:SS")
     return parser.parse_args()
 
 
@@ -85,6 +87,30 @@ def calculate_week_number(saturday_date: str, season_start: str = "2025-08-01") 
     start = dt.date.fromisoformat(season_start)
     diff_weeks = (saturday - start).days // 7
     return max(1, diff_weeks + 1)
+
+
+def normalize_kickoff_time(kickoff_time: str) -> str:
+    parts = str(kickoff_time or "").strip().split(":")
+    if len(parts) < 2:
+      raise ValueError("kickoffTime must be in HH:MM or HH:MM:SS format")
+    hours = parts[0].zfill(2)
+    minutes = parts[1].zfill(2)
+    seconds = parts[2].zfill(2) if len(parts) > 2 else "00"
+    return f"{hours}:{minutes}:{seconds}"
+
+
+def get_saturday_for_target_date(target_date: str) -> str:
+    date_value = dt.date.fromisoformat(target_date)
+    weekday = date_value.weekday()  # Mon=0 ... Sun=6
+
+    if weekday == 5:
+        saturday = date_value
+    elif weekday == 6:
+        saturday = date_value + dt.timedelta(days=6)
+    else:
+        saturday = date_value + dt.timedelta(days=(5 - weekday))
+
+    return saturday.isoformat()
 
 
 def get_tls_session() -> tls_client.Session:
@@ -127,9 +153,10 @@ def fetch_scheduled_events(session: tls_client.Session, date_iso: str) -> Dict[s
     return sofa_get(session, f"/sport/football/scheduled-events/{date_iso}")
 
 
-def filter_and_map_fixtures(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "15:00:00") -> List[Dict[str, Any]]:
     allowed_ids = set(SOFASCORE_TOURNAMENTS.keys())
     rows: List[Dict[str, Any]] = []
+    target_kickoff = normalize_kickoff_time(kickoff_time)[:5]
 
     for event in events:
         league_id = event.get("tournament", {}).get("uniqueTournament", {}).get("id")
@@ -143,7 +170,7 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]]) -> List[Dict[str, Any]
             continue
         kickoff_utc = dt.datetime.fromtimestamp(start_timestamp, tz=dt.timezone.utc)
         kickoff_uk = kickoff_utc.astimezone(UK_TZ)
-        if kickoff_uk.strftime("%H:%M") != "15:00":
+        if kickoff_uk.strftime("%H:%M") != target_kickoff:
             continue
 
         home = event.get("homeTeam", {}) or {}
@@ -455,23 +482,39 @@ class SupabaseRest:
             }
         )
 
-    def upsert_week(self, saturday_date: str, season: str, week_number: int) -> Dict[str, Any]:
+    def upsert_week(
+        self,
+        saturday_date: str,
+        season: str,
+        week_number: int,
+        target_date: str,
+        target_kickoff_time: str,
+        is_custom: bool,
+    ) -> Dict[str, Any]:
         payload = [
             {
                 "week_number": week_number,
                 "season": season,
                 "saturday_date": saturday_date,
+                "target_date": target_date,
+                "target_kickoff_time": target_kickoff_time,
+                "is_custom": is_custom,
                 "status": "active",
             }
         ]
         headers = {"Prefer": "resolution=merge-duplicates,return=representation"}
-        upsert_url = f"{self.base_url}/rest/v1/weeks?on_conflict=saturday_date"
+        upsert_url = f"{self.base_url}/rest/v1/weeks?on_conflict=season,week_number,is_custom"
         res = self.session.post(upsert_url, data=json.dumps(payload), headers=headers, timeout=30)
         if res.status_code >= 300:
             raise RuntimeError(f"Failed to upsert week: {res.status_code} {res.text[:300]}")
 
         query_url = f"{self.base_url}/rest/v1/weeks"
-        query_params = {"saturday_date": f"eq.{saturday_date}", "select": "*"}
+        query_params = {
+            "season": f"eq.{season}",
+            "week_number": f"eq.{week_number}",
+            "is_custom": f"eq.{str(is_custom).lower()}",
+            "select": "*",
+        }
         query = self.session.get(query_url, params=query_params, timeout=30)
         if query.status_code >= 300:
             raise RuntimeError(f"Failed to fetch week after upsert: {query.status_code} {query.text[:300]}")
@@ -501,14 +544,20 @@ def main() -> int:
             "Missing SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY in environment."
         )
 
-    saturday_date = get_relevant_saturday(week_offset)
+    is_custom = bool(args.targetDate and args.kickoffTime)
+    target_date = args.targetDate or get_relevant_saturday(week_offset)
+    target_kickoff_time = normalize_kickoff_time(args.kickoffTime or "15:00:00")
+    saturday_date = get_saturday_for_target_date(target_date) if is_custom else get_relevant_saturday(week_offset)
     season = get_current_season()
     week_number = calculate_week_number(saturday_date)
-    print(f"Fetching fixtures for saturday={saturday_date}, weekOffset={week_offset}")
+    print(
+        f"Fetching fixtures for target_date={target_date}, kickoff={target_kickoff_time}, "
+        f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}"
+    )
 
     tls_session = get_tls_session()
-    sofa_payload = fetch_scheduled_events(tls_session, saturday_date)
-    fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []))
+    sofa_payload = fetch_scheduled_events(tls_session, target_date)
+    fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
     print(f"Found {len(fixture_rows)} matching fixtures")
 
     if not fixture_rows:
@@ -543,13 +592,19 @@ def main() -> int:
         saturday_date=saturday_date,
         season=season,
         week_number=week_number,
+        target_date=target_date,
+        target_kickoff_time=target_kickoff_time,
+        is_custom=is_custom,
     )
 
     for row in fixture_rows:
         row["week_id"] = week["id"]
 
     supabase.upsert_fixtures(fixture_rows)
-    print(f"Stored/updated {len(fixture_rows)} fixtures (with insights) for week {week['week_number']}")
+    print(
+        f"Stored/updated {len(fixture_rows)} fixtures (with insights) for "
+        f"week {week['week_number']}{'.5' if week.get('is_custom') else ''}"
+    )
     return 0
 
 
