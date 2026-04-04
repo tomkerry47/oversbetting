@@ -7,14 +7,23 @@ import { LEAGUE_IDS } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 
 function parseRoundQuery(searchParams: URLSearchParams) {
+  const weekId = searchParams.get('weekId');
   const targetDate = searchParams.get('targetDate');
   const kickoffTime = searchParams.get('kickoffTime');
   const weekOffset = parseInt(searchParams.get('weekOffset') || '0');
+
+  if (weekId) {
+    return {
+      mode: 'existing' as const,
+      weekId: parseInt(weekId, 10),
+    };
+  }
 
   if (targetDate && kickoffTime) {
     const normalizedKickoffTime = normalizeKickoffTime(kickoffTime);
     const saturdayDate = getSaturdayForTargetDate(targetDate);
     return {
+      mode: 'custom' as const,
       isCustom: true,
       targetDate,
       kickoffTime: normalizedKickoffTime,
@@ -27,6 +36,7 @@ function parseRoundQuery(searchParams: URLSearchParams) {
 
   const saturdayDate = getRelevantSaturday(weekOffset);
   return {
+    mode: 'standard' as const,
     isCustom: false,
     targetDate: saturdayDate,
     kickoffTime: '15:00:00',
@@ -47,6 +57,38 @@ function isSaturdayDateUniqueConstraintError(error: unknown): boolean {
 
 async function getOrCreateWeek(searchParams: URLSearchParams) {
   const round = parseRoundQuery(searchParams);
+
+  if (round.mode === 'existing') {
+    const { data: existingWeek, error } = await supabase
+      .from('weeks')
+      .select('*')
+      .eq('id', round.weekId)
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const normalizedExistingWeek = normalizeWeek(existingWeek);
+    if (!normalizedExistingWeek) {
+      throw new Error('Week not found');
+    }
+
+    return {
+      week: normalizedExistingWeek,
+      round: {
+        mode: normalizedExistingWeek.is_custom ? 'custom' as const : 'standard' as const,
+        isCustom: normalizedExistingWeek.is_custom,
+        targetDate: normalizedExistingWeek.target_date,
+        kickoffTime: normalizeKickoffTime(normalizedExistingWeek.target_kickoff_time),
+        saturdayDate: normalizedExistingWeek.saturday_date,
+        season: normalizedExistingWeek.season,
+        weekNumber: normalizedExistingWeek.week_number,
+        weekOffset: 0,
+        weekId: normalizedExistingWeek.id,
+      },
+    };
+  }
 
   let week;
   let weekError;

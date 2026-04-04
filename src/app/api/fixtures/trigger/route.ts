@@ -34,11 +34,13 @@ async function findLatestWorkflowRun(
 
 export async function POST(request: NextRequest) {
   try {
-    const { weekOffset, targetDate, kickoffTime } = await request.json().catch(() => ({ weekOffset: 1 }));
+    const { weekOffset, targetDate, kickoffTime, isCustom } = await request.json().catch(() => ({ weekOffset: 1 }));
     const workflowWeekOffset = Number.isFinite(Number(weekOffset))
       ? String(Math.max(0, Math.floor(Number(weekOffset))))
       : '1';
-    const hasCustomRound = Boolean(targetDate && kickoffTime);
+    const hasExplicitTarget = Boolean(targetDate && kickoffTime);
+    const workflowIsCustom =
+      typeof isCustom === 'boolean' ? String(isCustom) : hasExplicitTarget ? 'true' : 'false';
 
     const token = process.env.GITHUB_ACTIONS_TRIGGER_TOKEN;
     const owner = process.env.GITHUB_REPO_OWNER || process.env.VERCEL_GIT_REPO_OWNER;
@@ -65,7 +67,8 @@ export async function POST(request: NextRequest) {
       ref,
       inputs: {
         week_offset: workflowWeekOffset,
-        ...(hasCustomRound ? { target_date: String(targetDate), kickoff_time: String(kickoffTime) } : {}),
+        ...(hasExplicitTarget ? { target_date: String(targetDate), kickoff_time: String(kickoffTime) } : {}),
+        is_custom: workflowIsCustom,
       },
     };
 
@@ -98,8 +101,9 @@ export async function POST(request: NextRequest) {
       ok: true,
       message: 'Fixture sync workflow triggered',
       weekOffset: workflowWeekOffset,
-      targetDate: hasCustomRound ? String(targetDate) : null,
-      kickoffTime: hasCustomRound ? String(kickoffTime) : null,
+      targetDate: hasExplicitTarget ? String(targetDate) : null,
+      kickoffTime: hasExplicitTarget ? String(kickoffTime) : null,
+      isCustom: workflowIsCustom,
       runId,
     });
   } catch (error: any) {

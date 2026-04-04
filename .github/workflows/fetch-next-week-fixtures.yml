@@ -13,6 +13,10 @@ on:
       kickoff_time:
         description: "Optional explicit UK kickoff time (HH:MM or HH:MM:SS) for custom rounds"
         required: false
+      is_custom:
+        description: "Whether the round should be stored as custom"
+        required: false
+        default: "false"
 
 jobs:
   sync-fixtures:
@@ -39,6 +43,7 @@ jobs:
           if [ -n "${{ github.event.inputs.target_date }}" ] && [ -n "${{ github.event.inputs.kickoff_time }}" ]; then
             ARGS="$ARGS --targetDate=${{ github.event.inputs.target_date }} --kickoffTime=${{ github.event.inputs.kickoff_time }}"
           fi
+          ARGS="$ARGS --isCustom=${{ github.event.inputs.is_custom }}"
           echo "Running: python scripts/fetch-fixtures-tls.py $ARGS"
           python scripts/fetch-fixtures-tls.py $ARGS
         env:

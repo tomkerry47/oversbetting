@@ -9,7 +9,8 @@ import { formatDate, formatKickoffTimeLabel, formatRoundLabel, getRelevantSaturd
 
 type RoundQuery =
   | { mode: 'standard'; weekOffset: number }
-  | { mode: 'custom'; targetDate: string; kickoffTime: string };
+  | { mode: 'custom'; targetDate: string; kickoffTime: string }
+  | { mode: 'existing'; weekId: number };
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {
   const controller = new AbortController();
@@ -28,6 +29,7 @@ async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: 
 
 export default function HomePage() {
   const [week, setWeek] = useState<Week | null>(null);
+  const [rounds, setRounds] = useState<Week[]>([]);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +44,12 @@ export default function HomePage() {
 
   const fetchData = useCallback(async (query: RoundQuery) => {
     try {
-      const fixturesUrl = query.mode === 'custom'
-        ? `/api/fixtures?targetDate=${encodeURIComponent(query.targetDate)}&kickoffTime=${encodeURIComponent(query.kickoffTime)}`
-        : `/api/fixtures?weekOffset=${query.weekOffset}`;
+      const fixturesUrl =
+        query.mode === 'existing'
+          ? `/api/fixtures?weekId=${query.weekId}`
+          : query.mode === 'custom'
+          ? `/api/fixtures?targetDate=${encodeURIComponent(query.targetDate)}&kickoffTime=${encodeURIComponent(query.kickoffTime)}`
+          : `/api/fixtures?weekOffset=${query.weekOffset}`;
 
       console.log('[Picks] fetchData start', query);
       setLoadingMessage('Loading fixtures...');
@@ -116,9 +121,23 @@ export default function HomePage() {
   }, []);
 
   const getFixturesUrl = useCallback((query: RoundQuery) => {
+    if (query.mode === 'existing') {
+      return `/api/fixtures?weekId=${query.weekId}`;
+    }
     return query.mode === 'custom'
       ? `/api/fixtures?targetDate=${encodeURIComponent(query.targetDate)}&kickoffTime=${encodeURIComponent(query.kickoffTime)}`
       : `/api/fixtures?weekOffset=${query.weekOffset}`;
+  }, []);
+
+  const loadRounds = useCallback(async () => {
+    try {
+      const { response, data } = await fetchJsonWithTimeout('/api/weeks', undefined, 20000);
+      if (response.ok) {
+        setRounds(data.weeks || []);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const triggerFixtureSync = useCallback(async (query: RoundQuery) => {
@@ -127,14 +146,31 @@ export default function HomePage() {
     setLoadingMessage('Triggering fixture sync job...');
 
     try {
+      let triggerPayload: Record<string, string | number | boolean>;
+      if (query.mode === 'existing' && week) {
+        triggerPayload = {
+          targetDate: week.target_date,
+          kickoffTime: week.target_kickoff_time,
+          isCustom: week.is_custom,
+          weekOffset: 0,
+        };
+      } else if (query.mode === 'custom') {
+        triggerPayload = {
+          targetDate: query.targetDate,
+          kickoffTime: query.kickoffTime,
+          isCustom: true,
+        };
+      } else {
+        triggerPayload = {
+          weekOffset: Math.max(0, query.mode === 'standard' ? query.weekOffset : 0),
+          isCustom: false,
+        };
+      }
+
       const triggerRes = await fetch('/api/fixtures/trigger', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          query.mode === 'custom'
-            ? { targetDate: query.targetDate, kickoffTime: query.kickoffTime }
-            : { weekOffset: Math.max(0, query.weekOffset) }
-        ),
+        body: JSON.stringify(triggerPayload),
       });
       const triggerData = await triggerRes.json();
 
@@ -181,6 +217,7 @@ export default function HomePage() {
           if (fixturesData.week?.id) {
             await loadSelectionsForWeek(fixturesData.week.id);
           }
+          await loadRounds();
           setLoadingMessage(`Fixture sync completed: ${fixtureCount} fixture${fixtureCount !== 1 ? 's' : ''}`);
           setTimeout(() => setLoadingMessage(''), 5000);
           return true;
@@ -197,24 +234,34 @@ export default function HomePage() {
     } finally {
       setRefreshing(false);
     }
-  }, [getFixturesUrl, loadSelectionsForWeek]);
+  }, [getFixturesUrl, loadRounds, loadSelectionsForWeek, week]);
 
   useEffect(() => {
     fetchData(activeQuery);
   }, [fetchData, activeQuery]);
 
+  useEffect(() => {
+    loadRounds();
+  }, [loadRounds]);
+
+  const currentRoundIndex = week ? rounds.findIndex((round) => round.id === week.id) : -1;
+
+  const handleNavigateRound = (direction: 'older' | 'newer') => {
+    if (currentRoundIndex < 0) return;
+    const nextIndex = direction === 'older' ? currentRoundIndex + 1 : currentRoundIndex - 1;
+    const nextRound = rounds[nextIndex];
+    if (!nextRound) return;
+
+    setError(null);
+    setActiveQuery({ mode: 'existing', weekId: nextRound.id });
+  };
+
   const handlePreviousWeek = () => {
-    if (weekOffset > 0) {
-      const nextOffset = weekOffset - 1;
-      setWeekOffset(nextOffset);
-      setActiveQuery({ mode: 'standard', weekOffset: nextOffset });
-    }
+    handleNavigateRound('older');
   };
 
   const handleNextWeek = () => {
-    const nextOffset = weekOffset + 1;
-    setWeekOffset(nextOffset);
-    setActiveQuery({ mode: 'standard', weekOffset: nextOffset });
+    handleNavigateRound('newer');
   };
 
   const handleLoadCustomRound = async () => {
@@ -247,6 +294,7 @@ export default function HomePage() {
 
       setWeek(fixturesData.week || null);
       setFixtures(fixturesData.fixtures || []);
+      await loadRounds();
       if (fixturesData.week?.id) {
         await loadSelectionsForWeek(fixturesData.week.id);
       }
@@ -263,6 +311,18 @@ export default function HomePage() {
 
   const handleBackToSaturday = () => {
     setError(null);
+    const matchingStandardRound = rounds.find(
+      (round) =>
+        round.week_number === week?.week_number &&
+        round.season === week?.season &&
+        !round.is_custom
+    );
+
+    if (matchingStandardRound) {
+      setActiveQuery({ mode: 'existing', weekId: matchingStandardRound.id });
+      return;
+    }
+
     setActiveQuery({ mode: 'standard', weekOffset });
   };
 
@@ -320,7 +380,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePreviousWeek}
-                disabled={weekOffset === 0 || activeQuery.mode === 'custom'}
+                disabled={currentRoundIndex < 0 || currentRoundIndex >= rounds.length - 1}
                 className="text-xl disabled:opacity-30 disabled:cursor-not-allowed hover:scale-110 transition-transform"
                 title="Previous week"
               >
@@ -331,7 +391,7 @@ export default function HomePage() {
               </h1>
               <button
                 onClick={handleNextWeek}
-                disabled={activeQuery.mode === 'custom'}
+                disabled={currentRoundIndex <= 0}
                 className="text-xl hover:scale-110 transition-transform"
                 title="Next week"
               >

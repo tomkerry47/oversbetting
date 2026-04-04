@@ -55,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weekOffset", type=int, default=1, help="0=current week, 1=next week")
     parser.add_argument("--targetDate", type=str, help="Explicit target date in YYYY-MM-DD format")
     parser.add_argument("--kickoffTime", type=str, help="Explicit UK kickoff time in HH:MM or HH:MM:SS")
+    parser.add_argument("--isCustom", type=str, help="Explicit custom-round flag: true or false")
     return parser.parse_args()
 
 
@@ -97,6 +98,17 @@ def normalize_kickoff_time(kickoff_time: str) -> str:
     minutes = parts[1].zfill(2)
     seconds = parts[2].zfill(2) if len(parts) > 2 else "00"
     return f"{hours}:{minutes}:{seconds}"
+
+
+def parse_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    raise ValueError("--isCustom must be true or false")
 
 
 def get_saturday_for_target_date(target_date: str) -> str:
@@ -544,7 +556,7 @@ def main() -> int:
             "Missing SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY in environment."
         )
 
-    is_custom = bool(args.targetDate and args.kickoffTime)
+    is_custom = parse_bool(args.isCustom, bool(args.targetDate and args.kickoffTime))
     target_date = args.targetDate or get_relevant_saturday(week_offset)
     target_kickoff_time = normalize_kickoff_time(args.kickoffTime or "15:00:00")
     saturday_date = get_saturday_for_target_date(target_date) if is_custom else get_relevant_saturday(week_offset)
