@@ -40,7 +40,10 @@ export default function StatsPage() {
   const [timeFilter, setTimeFilter] = useState<'30' | '90' | 'all'>('all');
 
   useEffect(() => {
+    let lastFetchAt = 0;
+
     const fetchStats = async () => {
+      lastFetchAt = Date.now();
       setLoading(true);
       try {
         const params = new URLSearchParams();
@@ -59,6 +62,32 @@ export default function StatsPage() {
       }
     };
     fetchStats();
+
+    // Re-fetch when another browser tab signals that results have been checked.
+    // The storage event only fires in tabs other than the one that wrote the value,
+    // so this handles the multi-tab scenario.
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'resultsUpdatedAt') fetchStats();
+    };
+
+    // Re-fetch when the user switches back to this browser tab, but only if
+    // results were updated more recently than the last fetch.
+    const handleVisibility = () => {
+      if (document.hidden) return;
+      try {
+        const updatedAt = parseInt(localStorage.getItem('resultsUpdatedAt') || '0', 10);
+        if (updatedAt > lastFetchAt) fetchStats();
+      } catch {
+        // ignore – localStorage may not be accessible
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [timeFilter]);
 
   if (loading) {

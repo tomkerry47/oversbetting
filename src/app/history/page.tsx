@@ -103,6 +103,8 @@ export default function HistoryPage() {
             );
           }
         }
+        // Signal the stats page to refresh its insights.
+        try { localStorage.setItem('resultsUpdatedAt', Date.now().toString()); } catch { /* ignore */ }
       } else {
         setCheckError(triggerData.error || 'Failed to trigger results workflow');
       }
