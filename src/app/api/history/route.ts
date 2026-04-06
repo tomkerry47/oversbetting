@@ -9,9 +9,8 @@ async function getVisibleHistoryWeeks() {
         .from('weeks')
         .select('*')
         .eq('status', 'active')
-        .order('target_date', { ascending: true })
-        .order('target_kickoff_time', { ascending: true })
-        .limit(1),
+        .order('target_date', { ascending: false })
+        .order('target_kickoff_time', { ascending: false }),
       supabase
         .from('weeks')
         .select('*')
@@ -37,8 +36,7 @@ async function getVisibleHistoryWeeks() {
         .from('weeks')
         .select('*')
         .eq('status', 'active')
-        .order('saturday_date', { ascending: true })
-        .limit(1),
+        .order('saturday_date', { ascending: false }),
       supabase
         .from('weeks')
         .select('*')
