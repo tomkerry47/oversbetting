@@ -131,7 +131,8 @@ export default function HomePage() {
 
   const loadRounds = useCallback(async () => {
     try {
-      const { response, data } = await fetchJsonWithTimeout('/api/weeks', undefined, 20000);
+      // Only load active weeks within the next 6 days for the main-page navigation.
+      const { response, data } = await fetchJsonWithTimeout('/api/weeks?upcoming=true', undefined, 20000);
       if (response.ok) {
         setRounds(data.weeks || []);
       }

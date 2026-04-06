@@ -163,16 +163,17 @@ async function getOrCreateWeek(searchParams: URLSearchParams) {
     if (!normalizedWeek) {
       throw new Error('Failed to normalize week');
     }
-    const existingKickoff = normalizeKickoffTime(normalizedWeek?.target_kickoff_time || '15:00:00');
+    // For custom rounds, if a week already exists with different params, silently use
+    // the existing week rather than surfacing a conflict error to the user.
+    const existingKickoff = normalizeKickoffTime(normalizedWeek.target_kickoff_time || '15:00:00');
     if (
       round.isCustom &&
-      (normalizedWeek?.target_date !== round.targetDate || existingKickoff !== round.kickoffTime)
+      (normalizedWeek.target_date !== round.targetDate || existingKickoff !== round.kickoffTime)
     ) {
-      throw new Error(
-        `Week ${round.weekNumber}.5 already exists for ${normalizedWeek?.target_date} at ${existingKickoff.slice(0, 5)}`
+      console.warn(
+        `[Fixtures] Custom week ${round.weekNumber}.5 already exists for ${normalizedWeek.target_date} at ${existingKickoff.slice(0, 5)}. Using existing week instead of requested ${round.targetDate} at ${round.kickoffTime.slice(0, 5)}.`
       );
     }
-
     return { week: normalizedWeek, round };
   }
 
@@ -239,7 +240,7 @@ export async function GET(request: NextRequest) {
     console.error('Fixtures API error:', err);
     const message = String(err?.message || '');
     const status =
-      message.includes('already exists for') || message.includes('drop_weeks_saturday_date_unique.sql')
+      message.includes('drop_weeks_saturday_date_unique.sql')
         ? 409
         : 500;
     return NextResponse.json({ error: err.message }, { status });
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
     console.error('Fixtures refresh error:', err);
     const message = String(err?.message || '');
     const status =
-      message.includes('already exists for') || message.includes('drop_weeks_saturday_date_unique.sql')
+      message.includes('drop_weeks_saturday_date_unique.sql')
         ? 409
         : 500;
     return NextResponse.json({ error: err.message }, { status });
