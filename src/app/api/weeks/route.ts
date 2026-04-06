@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { isMissingWeekColumnError, normalizeWeek, normalizeWeeks } from '@/lib/week-compat';
-import { getUKNow } from '@/lib/utils';
-import { format, addDays } from 'date-fns';
+import { getActiveRoundWindow } from '@/lib/utils';
 
 /**
  * GET /api/weeks - Get all weeks or a filtered subset.
@@ -14,22 +13,17 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const active = url.searchParams.get('active');
     const upcoming = url.searchParams.get('upcoming');
+    const { startDate, endDate } = getActiveRoundWindow(6);
 
     if (upcoming === 'true') {
-      // Return all active weeks whose target_date falls within the next 6 days,
-      // calculated in UK time so the window matches the users' local calendar.
-      const ukNow = getUKNow();
-      const todayStr = format(ukNow, 'yyyy-MM-dd');
-      const cutoffStr = format(addDays(ukNow, 6), 'yyyy-MM-dd');
-
       let weeks;
       try {
         const response = await supabase
           .from('weeks')
           .select('*')
           .eq('status', 'active')
-          .gte('target_date', todayStr)
-          .lte('target_date', cutoffStr)
+          .gte('target_date', startDate)
+          .lte('target_date', endDate)
           .order('target_date', { ascending: true })
           .order('target_kickoff_time', { ascending: true });
         if (response.error) throw response.error;
@@ -40,8 +34,8 @@ export async function GET(request: NextRequest) {
             .from('weeks')
             .select('*')
             .eq('status', 'active')
-            .gte('saturday_date', todayStr)
-            .lte('saturday_date', cutoffStr)
+            .gte('saturday_date', startDate)
+            .lte('saturday_date', endDate)
             .order('saturday_date', { ascending: true });
           if (fallback.error) throw fallback.error;
           weeks = fallback.data;
@@ -60,6 +54,8 @@ export async function GET(request: NextRequest) {
           .from('weeks')
           .select('*')
           .eq('status', 'active')
+          .gte('target_date', startDate)
+          .lte('target_date', endDate)
           .order('target_date', { ascending: false })
           .order('target_kickoff_time', { ascending: false })
           .limit(1)
@@ -72,6 +68,8 @@ export async function GET(request: NextRequest) {
             .from('weeks')
             .select('*')
             .eq('status', 'active')
+            .gte('saturday_date', startDate)
+            .lte('saturday_date', endDate)
             .order('saturday_date', { ascending: false })
             .limit(1)
             .single();
@@ -89,6 +87,7 @@ export async function GET(request: NextRequest) {
       const response = await supabase
         .from('weeks')
         .select('*')
+        .or(`status.eq.completed,and(status.eq.active,target_date.gte.${startDate},target_date.lte.${endDate})`)
         .order('target_date', { ascending: false })
         .order('target_kickoff_time', { ascending: false });
       if (response.error) throw response.error;
@@ -98,6 +97,7 @@ export async function GET(request: NextRequest) {
         const fallback = await supabase
           .from('weeks')
           .select('*')
+          .or(`status.eq.completed,and(status.eq.active,saturday_date.gte.${startDate},saturday_date.lte.${endDate})`)
           .order('saturday_date', { ascending: false });
         if (fallback.error) throw fallback.error;
         weeks = fallback.data;

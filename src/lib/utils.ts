@@ -1,4 +1,4 @@
-import { addHours, format, isSaturday, isSunday, nextSaturday } from 'date-fns';
+import { addDays, addHours, format, isSaturday, isSunday, nextSaturday } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { Week } from '@/types';
 
@@ -107,6 +107,14 @@ export function getRoundResultsAvailableAt(targetDate: string, kickoffTime: stri
 
 export function canCheckResultsForWeek(week: Pick<Week, 'target_date' | 'target_kickoff_time'>): boolean {
   return new Date() >= getRoundResultsAvailableAt(week.target_date, week.target_kickoff_time);
+}
+
+export function getActiveRoundWindow(daysAhead: number = 6): { startDate: string; endDate: string } {
+  const nowUk = getUKNow();
+  return {
+    startDate: format(nowUk, 'yyyy-MM-dd'),
+    endDate: format(addDays(nowUk, daysAhead), 'yyyy-MM-dd'),
+  };
 }
 
 export function toLeagueCode(leagueNameRaw: string | null | undefined): string {

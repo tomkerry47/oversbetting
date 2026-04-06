@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
+import { getActiveRoundWindow } from '@/lib/utils';
 
 async function getVisibleHistoryWeeks() {
+  const { startDate, endDate } = getActiveRoundWindow(6);
   try {
     const [activeResponse, completedResponse] = await Promise.all([
       supabase
         .from('weeks')
         .select('*')
         .eq('status', 'active')
+        .gte('target_date', startDate)
+        .lte('target_date', endDate)
         .order('target_date', { ascending: false })
         .order('target_kickoff_time', { ascending: false }),
       supabase
@@ -36,6 +40,8 @@ async function getVisibleHistoryWeeks() {
         .from('weeks')
         .select('*')
         .eq('status', 'active')
+        .gte('saturday_date', startDate)
+        .lte('saturday_date', endDate)
         .order('saturday_date', { ascending: false }),
       supabase
         .from('weeks')

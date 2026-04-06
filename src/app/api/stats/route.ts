@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, PlayerName, PlayerStats } from '@/types';
+import { getActiveRoundWindow } from '@/lib/utils';
 
 /**
  * GET /api/stats - Get player statistics.
@@ -128,11 +129,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get weekly breakdown: completed rounds plus only the nearest active round.
+    const { startDate, endDate } = getActiveRoundWindow(6);
     const [activeWeeksResponse, completedWeeksResponse] = await Promise.all([
       supabase
         .from('weeks')
         .select('*')
         .eq('status', 'active')
+        .gte('target_date', startDate)
+        .lte('target_date', endDate)
         .order('target_date', { ascending: true })
         .order('target_kickoff_time', { ascending: true })
         .limit(1),
