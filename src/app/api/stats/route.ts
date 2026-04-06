@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { PLAYERS, PlayerName, PlayerStats } from '@/types';
 import { getActiveRoundWindow } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/stats - Get player statistics.
  */
@@ -69,21 +71,36 @@ export async function GET(request: NextRequest) {
       const resolved = playerSelections.filter((s) => s.result !== 'pending');
       let currentStreak = 0;
       let bestStreak = 0;
-      let tempStreak = 0;
+      let tempWinStreak = 0;
+      let currentLossStreak = 0;
+      let bestLossStreak = 0;
+      let tempLossStreak = 0;
 
       for (const sel of resolved) {
         if (sel.result === 'won') {
-          tempStreak++;
-          bestStreak = Math.max(bestStreak, tempStreak);
+          tempWinStreak++;
+          tempLossStreak = 0;
+          bestStreak = Math.max(bestStreak, tempWinStreak);
         } else {
-          tempStreak = 0;
+          tempWinStreak = 0;
+          tempLossStreak++;
+          bestLossStreak = Math.max(bestLossStreak, tempLossStreak);
         }
       }
 
-      // Current streak (from the end)
+      // Current winning streak (from the end)
       for (let i = resolved.length - 1; i >= 0; i--) {
         if (resolved[i].result === 'won') {
           currentStreak++;
+        } else {
+          break;
+        }
+      }
+
+      // Current losing streak (from the end)
+      for (let i = resolved.length - 1; i >= 0; i--) {
+        if (resolved[i].result === 'lost') {
+          currentLossStreak++;
         } else {
           break;
         }
@@ -124,6 +141,8 @@ export async function GET(request: NextRequest) {
         cleared_fines: clearedFines,
         current_streak: currentStreak,
         best_streak: bestStreak,
+        current_loss_streak: currentLossStreak,
+        best_loss_streak: bestLossStreak,
         avg_goals: parseFloat(avgGoals.toFixed(2)),
       });
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PlayerStats, PLAYERS, MAX_SELECTIONS_PER_PLAYER } from '@/types';
 import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
@@ -36,38 +36,47 @@ export default function StatsPage() {
   const [stats, setStats] = useState<PlayerStats[]>([]);
   const [weeklyBreakdown, setWeeklyBreakdown] = useState<WeeklyBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<'30' | '90' | 'all'>('all');
+
+  const fetchStats = useCallback(async () => {
+    if (!refreshing) {
+      setLoading(true);
+    }
+    try {
+      const params = new URLSearchParams();
+      if (timeFilter !== 'all') {
+        params.append('days', timeFilter);
+      }
+
+      params.append('_ts', String(Date.now()));
+      const res = await fetch(`/api/stats?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      setStats(data.stats || []);
+      setWeeklyBreakdown(data.weeklyBreakdown || []);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [refreshing, timeFilter]);
 
   useEffect(() => {
     let lastFetchAt = 0;
 
-    const fetchStats = async () => {
+    const wrappedFetchStats = async () => {
       lastFetchAt = Date.now();
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (timeFilter !== 'all') {
-          params.append('days', timeFilter);
-        }
-        
-        const res = await fetch(`/api/stats?${params.toString()}`);
-        const data = await res.json();
-        setStats(data.stats || []);
-        setWeeklyBreakdown(data.weeklyBreakdown || []);
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
+      await fetchStats();
     };
-    fetchStats();
+    wrappedFetchStats();
 
     // Re-fetch when another browser tab signals that results have been checked.
     // The storage event only fires in tabs other than the one that wrote the value,
     // so this handles the multi-tab scenario.
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'resultsUpdatedAt') fetchStats();
+      if (e.key === 'resultsUpdatedAt') wrappedFetchStats();
     };
 
     // Re-fetch when the user switches back to this browser tab, but only if
@@ -76,7 +85,7 @@ export default function StatsPage() {
       if (document.hidden) return;
       try {
         const updatedAt = parseInt(localStorage.getItem('resultsUpdatedAt') || '0', 10);
-        if (updatedAt > lastFetchAt) fetchStats();
+        if (updatedAt > lastFetchAt) wrappedFetchStats();
       } catch {
         // ignore – localStorage may not be accessible
       }
@@ -88,7 +97,7 @@ export default function StatsPage() {
       window.removeEventListener('storage', handleStorage);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [timeFilter]);
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -113,7 +122,9 @@ export default function StatsPage() {
     (a, b) => b.current_streak - a.current_streak || b.best_streak - a.best_streak
   )[0];
   const coldestRun = [...stats].sort(
-    (a, b) => b.losses - a.losses || a.win_rate - b.win_rate
+    (a, b) =>
+      b.current_loss_streak - a.current_loss_streak ||
+      b.best_loss_streak - a.best_loss_streak
   )[0];
   const goalMachine = [...stats].sort(
     (a, b) => b.avg_goals - a.avg_goals || b.wins - a.wins
@@ -177,11 +188,11 @@ export default function StatsPage() {
           tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
         }
       : null,
-    coldestRun && coldestRun.losses > 1
+    coldestRun && coldestRun.current_loss_streak > 1
       ? {
           title: 'Coldest Streak',
-          value: `${coldestRun.losses} pick losses`,
-          detail: `${coldestRun.player_name} is in a rut: ${coldestRun.losses} straight losses across ${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.losses)} round${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.losses) === 1 ? '' : 's'}.`,
+          value: `${coldestRun.current_loss_streak} pick losses`,
+          detail: `${coldestRun.player_name} is in a rut: ${coldestRun.current_loss_streak} straight losses across ${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.current_loss_streak)} round${getRoundSpanForPickStreak(coldestRun.player_name, 'losses', coldestRun.current_loss_streak) === 1 ? '' : 's'}.`,
           tone: 'text-red-300 border-red-500/30 bg-red-500/10',
         }
       : null,
@@ -216,6 +227,16 @@ export default function StatsPage() {
             <h1 className="text-xl font-bold text-white">📊 Player Stats</h1>
             <p className="text-slate-400 text-xs mt-1">Performance across all weeks</p>
           </div>
+          <button
+            onClick={() => {
+              setRefreshing(true);
+              fetchStats();
+            }}
+            disabled={refreshing}
+            className="btn-secondary !py-2 !px-3 text-xs"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
         
         {/* Time Filter */}

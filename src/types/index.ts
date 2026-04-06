@@ -119,6 +119,8 @@ export interface PlayerStats {
   cleared_fines: number;
   current_streak: number;
   best_streak: number;
+  current_loss_streak: number;
+  best_loss_streak: number;
   avg_goals: number;
 }
 
