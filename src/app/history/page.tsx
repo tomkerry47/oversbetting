@@ -11,6 +11,8 @@ export default function HistoryPage() {
     Record<number, { selections: Selection[]; fines: Fine[] }>
   >({});
   const [loading, setLoading] = useState(true);
+  const [loadingWeek, setLoadingWeek] = useState<number | null>(null);
+  const [weekLoadErrors, setWeekLoadErrors] = useState<Record<number, string>>({});
   const [checkingResults, setCheckingResults] = useState<number | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
 
@@ -35,9 +37,22 @@ export default function HistoryPage() {
       return;
     }
 
+    setLoadingWeek(weekId);
+    setWeekLoadErrors((prev) => {
+      const next = { ...prev };
+      delete next[weekId];
+      return next;
+    });
     try {
       const res = await fetch(`/api/history?week_id=${weekId}`);
       const data = await res.json();
+      if (!res.ok) {
+        setWeekLoadErrors((prev) => ({
+          ...prev,
+          [weekId]: data.error || 'Failed to load week details',
+        }));
+        return;
+      }
       setWeekData((prev) => ({
         ...prev,
         [weekId]: {
@@ -47,7 +62,12 @@ export default function HistoryPage() {
       }));
       setExpandedWeek(weekId);
     } catch {
-      // ignore
+      setWeekLoadErrors((prev) => ({
+        ...prev,
+        [weekId]: 'Network error while loading week details',
+      }));
+    } finally {
+      setLoadingWeek(null);
     }
   };
 
@@ -171,6 +191,18 @@ export default function HistoryPage() {
                   </div>
                 </div>
 
+                {loadingWeek === week.id && (
+                  <div className="mt-3 pt-3 border-t border-slate-700">
+                    <p className="text-slate-400 text-xs text-center py-2">Loading picks...</p>
+                  </div>
+                )}
+
+                {weekLoadErrors[week.id] && (
+                  <div className="mt-3 pt-3 border-t border-slate-700">
+                    <p className="text-red-400 text-xs">❌ {weekLoadErrors[week.id]}</p>
+                  </div>
+                )}
+
                 {isExpanded && data && (
                   <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
                     {PLAYERS.map((player) => {
@@ -228,6 +260,12 @@ export default function HistoryPage() {
                         </div>
                       );
                     })}
+
+                    {data.selections.length === 0 && (
+                      <p className="text-slate-500 text-xs text-center py-1">
+                        No picks recorded for this round yet.
+                      </p>
+                    )}
                     
                     {/* Check Results Button - at bottom, subtle for completed weeks */}
                     {data.selections.length > 0 && (
