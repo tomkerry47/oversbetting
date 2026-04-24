@@ -142,7 +142,7 @@ def get_tls_session() -> FetcherSession:
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
-    last_error: Exception = RuntimeError(f"No fixture API requests attempted for {endpoint}")
+    last_error: Exception | None = None
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
 
@@ -161,7 +161,7 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
     attempted_hosts = ", ".join(API_BASES)
     raise RuntimeError(
         f"All fixture API hosts failed for {endpoint} "
-        f"(hosts: {attempted_hosts}; last error: {last_error})"
+        f"(hosts: {attempted_hosts}; last error: {last_error or 'unknown error'})"
     ) from last_error
 
 

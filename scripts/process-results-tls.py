@@ -66,26 +66,27 @@ def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
         "Origin": "https://www.sofascore.com",
         "Referer": "https://www.sofascore.com/",
     }
-    last_error: Exception = RuntimeError(f"No result API requests attempted for fixture {fixture_id}")
+    last_error: Exception | None = None
 
     for base_url in API_BASES:
         url = f"{base_url}/event/{fixture_id}"
-        response = session.get(url, headers=headers, timeout=30)
-        if response.status == 200:
-            payload = json.loads(response.body)
-            return payload.get("event", {})
+        for attempt in range(3):
+            response = session.get(url, headers=headers, timeout=30)
+            if response.status == 200:
+                payload = json.loads(response.body)
+                return payload.get("event", {})
 
-        snippet = response.body.decode("utf-8", errors="replace")[:250] if response.body else ""
-        last_error = RuntimeError(f"Result API error {response.status} for /event/{fixture_id}: {snippet}")
-        if response.status == 403:
-            time.sleep(1.5)
-            continue
-        break
+            snippet = response.body.decode("utf-8", errors="replace")[:250] if response.body else ""
+            last_error = RuntimeError(f"Result API error {response.status} for /event/{fixture_id}: {snippet}")
+            if response.status == 403 and attempt < 2:
+                time.sleep(1.5 + attempt)
+                continue
+            break
 
     attempted_hosts = ", ".join(API_BASES)
     raise RuntimeError(
         f"All result API hosts failed for /event/{fixture_id} "
-        f"(hosts: {attempted_hosts}; last error: {last_error})"
+        f"(hosts: {attempted_hosts}; last error: {last_error or 'unknown error'})"
     ) from last_error
 
 
