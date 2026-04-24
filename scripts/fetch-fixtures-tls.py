@@ -143,7 +143,6 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
     last_error: Exception | None = None
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
-        saw_403 = False
 
         for attempt in range(retries):
             response = session.get(url, timeout=30)
@@ -152,17 +151,12 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
 
             snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
             last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
-            if response.status == 403:
-                saw_403 = True
-                if attempt < retries - 1:
-                    time.sleep(1.5 + attempt)
-                    continue
+            if response.status == 403 and attempt < retries - 1:
+                time.sleep(1.5 + attempt)
+                continue
             break
 
-        if not saw_403:
-            break
-
-    raise last_error or RuntimeError(f"Unknown SofaScore error for {endpoint}")
+    raise last_error or RuntimeError(f"All SofaScore API hosts failed for {endpoint}")
 
 
 def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
