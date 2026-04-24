@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 try:
-    import tls_client
+    from curl_cffi import requests as curl_requests
 except ImportError as exc:
     raise SystemExit(
         "Missing Python dependency for TLS client "
@@ -50,14 +50,11 @@ def status_short(status_type: str) -> str:
     return "NS"
 
 
-def get_tls_session() -> tls_client.Session:
-    return tls_client.Session(
-        client_identifier="chrome_120",
-        random_tls_extension_order=True,
-    )
+def get_tls_session() -> curl_requests.Session:
+    return curl_requests.Session(impersonate="chrome120")
 
 
-def fetch_event_result(session: tls_client.Session, fixture_id: int) -> Dict[str, Any]:
+def fetch_event_result(session: curl_requests.Session, fixture_id: int) -> Dict[str, Any]:
     url = f"{API_BASE}/event/{fixture_id}"
     headers = {
         "Accept": "*/*",
@@ -69,7 +66,7 @@ def fetch_event_result(session: tls_client.Session, fixture_id: int) -> Dict[str
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ),
     }
-    response = session.get(url, headers=headers, timeout_seconds=30)
+    response = session.get(url, headers=headers, timeout=30)
     if response.status_code != 200:
         snippet = response.text[:250] if response.text else ""
         raise RuntimeError(f"SofaScore /event/{fixture_id} error {response.status_code}: {snippet}")

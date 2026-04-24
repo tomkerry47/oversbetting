@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 try:
-    import tls_client
+    from curl_cffi import requests as curl_requests
 except ImportError as exc:
     raise SystemExit(
         "Missing Python dependency for TLS client "
@@ -125,14 +125,11 @@ def get_saturday_for_target_date(target_date: str) -> str:
     return saturday.isoformat()
 
 
-def get_tls_session() -> tls_client.Session:
-    return tls_client.Session(
-        client_identifier="chrome_120",
-        random_tls_extension_order=True,
-    )
+def get_tls_session() -> curl_requests.Session:
+    return curl_requests.Session(impersonate="chrome120")
 
 
-def sofa_get(session: tls_client.Session, endpoint: str, retries: int = 3) -> Dict[str, Any]:
+def sofa_get(session: curl_requests.Session, endpoint: str, retries: int = 3) -> Dict[str, Any]:
     url = f"{API_BASE}{endpoint}"
     headers = {
         "Accept": "*/*",
@@ -147,7 +144,7 @@ def sofa_get(session: tls_client.Session, endpoint: str, retries: int = 3) -> Di
 
     last_error: Exception | None = None
     for attempt in range(retries):
-        response = session.get(url, headers=headers, timeout_seconds=30)
+        response = session.get(url, headers=headers, timeout=30)
         if response.status_code == 200:
             return json.loads(response.text)
 
@@ -161,7 +158,7 @@ def sofa_get(session: tls_client.Session, endpoint: str, retries: int = 3) -> Di
     raise last_error or RuntimeError(f"Unknown SofaScore error for {endpoint}")
 
 
-def fetch_scheduled_events(session: tls_client.Session, date_iso: str) -> Dict[str, Any]:
+def fetch_scheduled_events(session: curl_requests.Session, date_iso: str) -> Dict[str, Any]:
     return sofa_get(session, f"/sport/football/scheduled-events/{date_iso}")
 
 
@@ -228,7 +225,7 @@ def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
 
 
 def fetch_table_positions(
-    session: tls_client.Session, league_id: int, season_id: int | None
+    session: curl_requests.Session, league_id: int, season_id: int | None
 ) -> Dict[int, int]:
     if not season_id:
         return {}
@@ -421,7 +418,7 @@ def apply_star_rankings(rows: List[Dict[str, Any]]) -> None:
         row["star_rank"] = i + 1
 
 
-def enrich_fixture_row(session: tls_client.Session, row: Dict[str, Any]) -> None:
+def enrich_fixture_row(session: curl_requests.Session, row: Dict[str, Any]) -> None:
     fixture_id = row.get("api_fixture_id")
     home_team_id = row.get("home_team_id")
     away_team_id = row.get("away_team_id")
