@@ -140,7 +140,7 @@ def get_tls_session() -> FetcherSession:
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
-    last_error: Exception | None = None
+    last_error: Exception = RuntimeError(f"No SofaScore requests attempted for {endpoint}")
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
 
@@ -156,11 +156,11 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
                 continue
             break
 
-    if last_error:
-        raise RuntimeError(
-            f"All SofaScore API hosts failed for {endpoint} (last error: {last_error})"
-        ) from last_error
-    raise RuntimeError(f"All SofaScore API hosts failed for {endpoint}")
+    attempted_hosts = ", ".join(API_BASES)
+    raise RuntimeError(
+        f"All SofaScore API hosts failed for {endpoint} "
+        f"(hosts: {attempted_hosts}; last error: {last_error})"
+    ) from last_error
 
 
 def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
