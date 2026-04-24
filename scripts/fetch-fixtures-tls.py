@@ -568,7 +568,16 @@ def main() -> int:
     )
 
     tls_session = get_tls_session()
-    sofa_payload = fetch_scheduled_events(tls_session, target_date)
+    try:
+        sofa_payload = fetch_scheduled_events(tls_session, target_date)
+    except RuntimeError as exc:
+        if str(exc).startswith("SofaScore error 403 "):
+            print(
+                f"SofaScore API unavailable (403) for {target_date} — no fixtures fetched.",
+                file=sys.stderr,
+            )
+            return 0
+        raise
     fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
     print(f"Found {len(fixture_rows)} matching fixtures")
 
