@@ -30,7 +30,10 @@ except ImportError as exc:
     ) from exc
 
 
-API_BASE = "https://api.sofascore.com/api/v1"
+API_BASES = (
+    "https://www.sofascore.com/api/v1",
+    "https://api.sofascore.com/api/v1",
+)
 UK_TZ = ZoneInfo("Europe/London")
 
 SOFASCORE_TOURNAMENTS: Dict[int, str] = {
@@ -137,22 +140,27 @@ def get_tls_session() -> FetcherSession:
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
-    url = f"{API_BASE}{endpoint}"
+    last_error: Exception = RuntimeError(f"No SofaScore requests attempted for {endpoint}")
+    for base_url in API_BASES:
+        url = f"{base_url}{endpoint}"
 
-    last_error: Exception | None = None
-    for attempt in range(retries):
-        response = session.get(url, timeout=30)
-        if response.status == 200:
-            return json.loads(response.body)
+        for attempt in range(retries):
+            response = session.get(url, timeout=30)
+            if response.status == 200:
+                return json.loads(response.body)
 
-        snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
-        last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
-        if response.status == 403 and attempt < retries - 1:
-            time.sleep(1.5 + attempt)
-            continue
-        break
+            snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
+            last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
+            if response.status == 403 and attempt < retries - 1:
+                time.sleep(1.5 + attempt)
+                continue
+            break
 
-    raise last_error or RuntimeError(f"Unknown SofaScore error for {endpoint}")
+    attempted_hosts = ", ".join(API_BASES)
+    raise RuntimeError(
+        f"All SofaScore API hosts failed for {endpoint} "
+        f"(hosts: {attempted_hosts}; last error: {last_error})"
+    ) from last_error
 
 
 def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
@@ -563,16 +571,7 @@ def main() -> int:
 
     tls_session_factory = get_tls_session()
     with tls_session_factory as tls_session:
-        try:
-            sofa_payload = fetch_scheduled_events(tls_session, target_date)
-        except RuntimeError as exc:
-            if str(exc).startswith("SofaScore error 403 "):
-                print(
-                    f"SofaScore API unavailable (403) for {target_date} — no fixtures fetched.",
-                    file=sys.stderr,
-                )
-                return 0
-            raise
+        sofa_payload = fetch_scheduled_events(tls_session, target_date)
         fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
         print(f"Found {len(fixture_rows)} matching fixtures")
 
