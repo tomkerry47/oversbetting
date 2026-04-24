@@ -22,10 +22,10 @@ from zoneinfo import ZoneInfo
 import requests
 
 try:
-    from curl_cffi import requests as curl_requests
+    from scrapling.fetchers import FetcherSession
 except ImportError as exc:
     raise SystemExit(
-        "Missing Python dependency for TLS client "
+        "Missing Python dependency for Scrapling "
         f"({exc}). Install with: pip3 install -r scripts/requirements-tls.txt"
     ) from exc
 
@@ -125,32 +125,28 @@ def get_saturday_for_target_date(target_date: str) -> str:
     return saturday.isoformat()
 
 
-def get_tls_session() -> curl_requests.Session:
-    return curl_requests.Session(impersonate="chrome120")
+def get_tls_session() -> FetcherSession:
+    return FetcherSession(impersonate="chrome", stealthy_headers=True)
 
 
-def sofa_get(session: curl_requests.Session, endpoint: str, retries: int = 3) -> Dict[str, Any]:
+def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
     url = f"{API_BASE}{endpoint}"
     headers = {
         "Accept": "*/*",
         "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
         "Origin": "https://www.sofascore.com",
         "Referer": "https://www.sofascore.com/",
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
     }
 
     last_error: Exception | None = None
     for attempt in range(retries):
         response = session.get(url, headers=headers, timeout=30)
-        if response.status_code == 200:
-            return json.loads(response.text)
+        if response.status == 200:
+            return json.loads(response.body)
 
-        snippet = response.text[:300] if response.text else ""
-        last_error = RuntimeError(f"SofaScore error {response.status_code} for {endpoint}: {snippet}")
-        if response.status_code == 403 and attempt < retries - 1:
+        snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
+        last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
+        if response.status == 403 and attempt < retries - 1:
             time.sleep(1.5 + attempt)
             continue
         break
@@ -158,7 +154,7 @@ def sofa_get(session: curl_requests.Session, endpoint: str, retries: int = 3) ->
     raise last_error or RuntimeError(f"Unknown SofaScore error for {endpoint}")
 
 
-def fetch_scheduled_events(session: curl_requests.Session, date_iso: str) -> Dict[str, Any]:
+def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
     return sofa_get(session, f"/sport/football/scheduled-events/{date_iso}")
 
 
@@ -225,7 +221,7 @@ def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
 
 
 def fetch_table_positions(
-    session: curl_requests.Session, league_id: int, season_id: int | None
+    session: Any, league_id: int, season_id: int | None
 ) -> Dict[int, int]:
     if not season_id:
         return {}
@@ -418,7 +414,7 @@ def apply_star_rankings(rows: List[Dict[str, Any]]) -> None:
         row["star_rank"] = i + 1
 
 
-def enrich_fixture_row(session: curl_requests.Session, row: Dict[str, Any]) -> None:
+def enrich_fixture_row(session: Any, row: Dict[str, Any]) -> None:
     fixture_id = row.get("api_fixture_id")
     home_team_id = row.get("home_team_id")
     away_team_id = row.get("away_team_id")
@@ -564,42 +560,43 @@ def main() -> int:
         f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}"
     )
 
-    tls_session = get_tls_session()
-    try:
-        sofa_payload = fetch_scheduled_events(tls_session, target_date)
-    except RuntimeError as exc:
-        if str(exc).startswith("SofaScore error 403 "):
-            print(
-                f"SofaScore API unavailable (403) for {target_date} — no fixtures fetched.",
-                file=sys.stderr,
-            )
-            return 0
-        raise
-    fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
-    print(f"Found {len(fixture_rows)} matching fixtures")
-
-    if not fixture_rows:
-        return 0
-
-    # Enrich each fixture with cached form and odds for instant UI dropdown details.
-    for i, row in enumerate(fixture_rows):
-        fixture_id = row.get("api_fixture_id")
+    tls_session_factory = get_tls_session()
+    with tls_session_factory as tls_session:
         try:
-            enrich_fixture_row(tls_session, row)
-            print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
-        except Exception as exc:
-            print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
-            row["home_form"] = []
-            row["away_form"] = []
-            row["odds_over_25"] = None
-            row["odds_under_25"] = None
-            row["home_team_position"] = None
-            row["away_team_position"] = None
-            row["is_star_pick"] = False
-            row["star_rank"] = None
-            row["star_score"] = None
-            row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        time.sleep(0.4)
+            sofa_payload = fetch_scheduled_events(tls_session, target_date)
+        except RuntimeError as exc:
+            if str(exc).startswith("SofaScore error 403 "):
+                print(
+                    f"SofaScore API unavailable (403) for {target_date} — no fixtures fetched.",
+                    file=sys.stderr,
+                )
+                return 0
+            raise
+        fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
+        print(f"Found {len(fixture_rows)} matching fixtures")
+
+        if not fixture_rows:
+            return 0
+
+        # Enrich each fixture with cached form and odds for instant UI dropdown details.
+        for i, row in enumerate(fixture_rows):
+            fixture_id = row.get("api_fixture_id")
+            try:
+                enrich_fixture_row(tls_session, row)
+                print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
+            except Exception as exc:
+                print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
+                row["home_form"] = []
+                row["away_form"] = []
+                row["odds_over_25"] = None
+                row["odds_under_25"] = None
+                row["home_team_position"] = None
+                row["away_team_position"] = None
+                row["is_star_pick"] = False
+                row["star_rank"] = None
+                row["star_score"] = None
+                row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+            time.sleep(0.4)
 
     apply_star_rankings(fixture_rows)
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]

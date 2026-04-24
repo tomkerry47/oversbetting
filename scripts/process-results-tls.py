@@ -23,10 +23,10 @@ from typing import Any, Dict, List, Optional
 import requests
 
 try:
-    from curl_cffi import requests as curl_requests
+    from scrapling.fetchers import FetcherSession
 except ImportError as exc:
     raise SystemExit(
-        "Missing Python dependency for TLS client "
+        "Missing Python dependency for Scrapling "
         f"({exc}). Install with: pip3 install -r scripts/requirements-tls.txt"
     ) from exc
 
@@ -50,27 +50,23 @@ def status_short(status_type: str) -> str:
     return "NS"
 
 
-def get_tls_session() -> curl_requests.Session:
-    return curl_requests.Session(impersonate="chrome120")
+def get_tls_session() -> FetcherSession:
+    return FetcherSession(impersonate="chrome", stealthy_headers=True)
 
 
-def fetch_event_result(session: curl_requests.Session, fixture_id: int) -> Dict[str, Any]:
+def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
     url = f"{API_BASE}/event/{fixture_id}"
     headers = {
         "Accept": "*/*",
         "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
         "Origin": "https://www.sofascore.com",
         "Referer": "https://www.sofascore.com/",
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
     }
     response = session.get(url, headers=headers, timeout=30)
-    if response.status_code != 200:
-        snippet = response.text[:250] if response.text else ""
-        raise RuntimeError(f"SofaScore /event/{fixture_id} error {response.status_code}: {snippet}")
-    payload = json.loads(response.text)
+    if response.status != 200:
+        snippet = response.body.decode("utf-8", errors="replace")[:250] if response.body else ""
+        raise RuntimeError(f"SofaScore /event/{fixture_id} error {response.status}: {snippet}")
+    payload = json.loads(response.body)
     return payload.get("event", {})
 
 
@@ -173,28 +169,28 @@ def main() -> int:
         raise RuntimeError("No selected fixtures found for week")
     print(f"[Results] Processing {len(fixtures)} selected fixtures")
 
-    tls_session = get_tls_session()
+    tls_session_factory = get_tls_session()
+    with tls_session_factory as tls_session:
+        # Refresh fixture scores/status from SofaScore
+        for idx, fixture in enumerate(fixtures):
+            fixture_api_id = fixture["api_fixture_id"]
+            try:
+                event = fetch_event_result(tls_session, fixture_api_id)
+                home_score = (event.get("homeScore") or {}).get("current")
+                away_score = (event.get("awayScore") or {}).get("current")
+                short = status_short((event.get("status") or {}).get("type", "notstarted"))
 
-    # Refresh fixture scores/status from SofaScore
-    for idx, fixture in enumerate(fixtures):
-        fixture_api_id = fixture["api_fixture_id"]
-        try:
-            event = fetch_event_result(tls_session, fixture_api_id)
-            home_score = (event.get("homeScore") or {}).get("current")
-            away_score = (event.get("awayScore") or {}).get("current")
-            short = status_short((event.get("status") or {}).get("type", "notstarted"))
+                db.patch(
+                    "fixtures",
+                    {"api_fixture_id": f"eq.{fixture_api_id}"},
+                    {"home_score": home_score, "away_score": away_score, "match_status": short},
+                )
+                print(f"[Results] Updated fixture {fixture_api_id}: {home_score}-{away_score} ({short})")
+            except Exception as exc:
+                print(f"[Results] Skipped fixture {fixture_api_id}: {exc}", file=sys.stderr)
 
-            db.patch(
-                "fixtures",
-                {"api_fixture_id": f"eq.{fixture_api_id}"},
-                {"home_score": home_score, "away_score": away_score, "match_status": short},
-            )
-            print(f"[Results] Updated fixture {fixture_api_id}: {home_score}-{away_score} ({short})")
-        except Exception as exc:
-            print(f"[Results] Skipped fixture {fixture_api_id}: {exc}", file=sys.stderr)
-
-        if idx < len(fixtures) - 1:
-            time.sleep(1.5)
+            if idx < len(fixtures) - 1:
+                time.sleep(1.5)
 
     updated_fixtures = db.get("fixtures", {"week_id": f"eq.{week_id}", "select": "*"})
     fixtures_by_id = {f["id"]: f for f in updated_fixtures}
