@@ -156,7 +156,11 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
                 continue
             break
 
-    raise last_error or RuntimeError(f"All SofaScore API hosts failed for {endpoint}")
+    if last_error:
+        raise RuntimeError(
+            f"All SofaScore API hosts failed for {endpoint} (last error: {last_error})"
+        ) from last_error
+    raise RuntimeError(f"All SofaScore API hosts failed for {endpoint}")
 
 
 def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
