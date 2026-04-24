@@ -152,11 +152,11 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
 
             snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
             last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
-            if response.status == 403 and attempt < retries - 1:
+            if response.status == 403:
                 saw_403 = True
-                time.sleep(1.5 + attempt)
-                continue
-            saw_403 = response.status == 403
+                if attempt < retries - 1:
+                    time.sleep(1.5 + attempt)
+                    continue
             break
 
         if not saw_403:
