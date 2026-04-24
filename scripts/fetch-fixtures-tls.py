@@ -126,21 +126,22 @@ def get_saturday_for_target_date(target_date: str) -> str:
 
 
 def get_tls_session() -> FetcherSession:
-    return FetcherSession(impersonate="chrome", stealthy_headers=True)
+    return FetcherSession(
+        impersonate="chrome",
+        stealthy_headers=True,
+        headers={
+            "Origin": "https://www.sofascore.com",
+            "Referer": "https://www.sofascore.com/",
+        },
+    )
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
     url = f"{API_BASE}{endpoint}"
-    headers = {
-        "Accept": "*/*",
-        "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
-        "Origin": "https://www.sofascore.com",
-        "Referer": "https://www.sofascore.com/",
-    }
 
     last_error: Exception | None = None
     for attempt in range(retries):
-        response = session.get(url, headers=headers, timeout=30)
+        response = session.get(url, timeout=30)
         if response.status == 200:
             return json.loads(response.body)
 
