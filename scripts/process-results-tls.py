@@ -31,7 +31,12 @@ except ImportError as exc:
     ) from exc
 
 
-API_BASE = "https://api.sofascore.com/api/v1"
+API_BASES = (
+    "https://api.sofascore.com/api/v1",
+    "https://www.sofascore.com/api/v1",
+    "https://api.sofavpn.com/api/v1",
+    "https://www.sofavpn.com/api/v1",
+)
 GOAL_THRESHOLD = 2
 COMPLETED_STATUSES = {"FT", "AET", "PEN"}
 
@@ -55,19 +60,33 @@ def get_tls_session() -> FetcherSession:
 
 
 def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
-    url = f"{API_BASE}/event/{fixture_id}"
     headers = {
         "Accept": "*/*",
         "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
         "Origin": "https://www.sofascore.com",
         "Referer": "https://www.sofascore.com/",
     }
-    response = session.get(url, headers=headers, timeout=30)
-    if response.status != 200:
+    last_error: Exception = RuntimeError(f"No result API requests attempted for fixture {fixture_id}")
+
+    for base_url in API_BASES:
+        url = f"{base_url}/event/{fixture_id}"
+        response = session.get(url, headers=headers, timeout=30)
+        if response.status == 200:
+            payload = json.loads(response.body)
+            return payload.get("event", {})
+
         snippet = response.body.decode("utf-8", errors="replace")[:250] if response.body else ""
-        raise RuntimeError(f"SofaScore /event/{fixture_id} error {response.status}: {snippet}")
-    payload = json.loads(response.body)
-    return payload.get("event", {})
+        last_error = RuntimeError(f"Result API error {response.status} for /event/{fixture_id}: {snippet}")
+        if response.status == 403:
+            time.sleep(1.5)
+            continue
+        break
+
+    attempted_hosts = ", ".join(API_BASES)
+    raise RuntimeError(
+        f"All result API hosts failed for /event/{fixture_id} "
+        f"(hosts: {attempted_hosts}; last error: {last_error})"
+    ) from last_error
 
 
 class SupabaseRest:

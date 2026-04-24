@@ -33,6 +33,8 @@ except ImportError as exc:
 API_BASES = (
     "https://www.sofascore.com/api/v1",
     "https://api.sofascore.com/api/v1",
+    "https://www.sofavpn.com/api/v1",
+    "https://api.sofavpn.com/api/v1",
 )
 UK_TZ = ZoneInfo("Europe/London")
 
@@ -140,7 +142,7 @@ def get_tls_session() -> FetcherSession:
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
-    last_error: Exception = RuntimeError(f"No SofaScore requests attempted for {endpoint}")
+    last_error: Exception = RuntimeError(f"No fixture API requests attempted for {endpoint}")
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
 
@@ -150,7 +152,7 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
                 return json.loads(response.body)
 
             snippet = response.body.decode("utf-8", errors="replace")[:300] if response.body else ""
-            last_error = RuntimeError(f"SofaScore error {response.status} for {endpoint}: {snippet}")
+            last_error = RuntimeError(f"Fixture API error {response.status} for {endpoint}: {snippet}")
             if response.status == 403 and attempt < retries - 1:
                 time.sleep(1.5 + attempt)
                 continue
@@ -158,7 +160,7 @@ def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
 
     attempted_hosts = ", ".join(API_BASES)
     raise RuntimeError(
-        f"All SofaScore API hosts failed for {endpoint} "
+        f"All fixture API hosts failed for {endpoint} "
         f"(hosts: {attempted_hosts}; last error: {last_error})"
     ) from last_error
 
