@@ -37,6 +37,7 @@ API_BASES = (
     "https://api.sofavpn.com/api/v1",
     "https://www.sofavpn.com/api/v1",
 )
+DEFAULT_RETRIES = 3
 GOAL_THRESHOLD = 2
 COMPLETED_STATUSES = {"FT", "AET", "PEN"}
 
@@ -70,7 +71,7 @@ def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
 
     for base_url in API_BASES:
         url = f"{base_url}/event/{fixture_id}"
-        for attempt in range(3):
+        for attempt in range(DEFAULT_RETRIES):
             response = session.get(url, headers=headers, timeout=30)
             if response.status == 200:
                 payload = json.loads(response.body)
@@ -78,7 +79,7 @@ def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
 
             snippet = response.body.decode("utf-8", errors="replace")[:250] if response.body else ""
             last_error = RuntimeError(f"Result API error {response.status} for /event/{fixture_id}: {snippet}")
-            if response.status == 403 and attempt < 2:
+            if response.status == 403 and attempt < DEFAULT_RETRIES - 1:
                 time.sleep(1.5 + attempt)
                 continue
             break

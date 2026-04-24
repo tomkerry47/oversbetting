@@ -31,11 +31,12 @@ except ImportError as exc:
 
 
 API_BASES = (
-    "https://www.sofascore.com/api/v1",
     "https://api.sofascore.com/api/v1",
-    "https://www.sofavpn.com/api/v1",
+    "https://www.sofascore.com/api/v1",
     "https://api.sofavpn.com/api/v1",
+    "https://www.sofavpn.com/api/v1",
 )
+DEFAULT_RETRIES = 3
 UK_TZ = ZoneInfo("Europe/London")
 
 SOFASCORE_TOURNAMENTS: Dict[int, str] = {
@@ -141,7 +142,7 @@ def get_tls_session() -> FetcherSession:
     )
 
 
-def sofa_get(session: Any, endpoint: str, retries: int = 3) -> Dict[str, Any]:
+def sofa_get(session: Any, endpoint: str, retries: int = DEFAULT_RETRIES) -> Dict[str, Any]:
     last_error: Exception | None = None
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
