@@ -4,6 +4,10 @@ import { formatKickoffTimeLabel } from './utils';
 // Using SofaScore unofficial API (free, no key needed)
 const API_BASE = 'https://api.sofascore.com/api/v1';
 
+// RapidAPI SofaScore host (requires RAPIDAPI_KEY)
+const RAPIDAPI_HOST = 'sofascore.p.rapidapi.com';
+const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`;
+
 // Rotating user agents to appear more human
 const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -37,6 +41,195 @@ const SOFASCORE_TOURNAMENTS: Record<string, { id: number; name: string }> = {
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// RapidAPI helpers
+// ---------------------------------------------------------------------------
+
+// In-memory cache for season IDs – valid for 24 hours per tournament.
+const seasonIdCache = new Map<number, { id: number; cachedAt: number }>();
+const SEASON_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function rapidApiRequest(endpoint: string) {
+  const apiKey = process.env.RAPIDAPI_KEY;
+  if (!apiKey) {
+    throw new Error('RAPIDAPI_KEY environment variable is not set');
+  }
+  const url = `${RAPIDAPI_BASE}${endpoint}`;
+  console.log(`RapidAPI request: ${url}`);
+
+  const res = await fetch(url, {
+    headers: {
+      'x-rapidapi-host': RAPIDAPI_HOST,
+      'x-rapidapi-key': apiKey,
+    },
+    next: { revalidate: 0 },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`RapidAPI error ${res.status} for ${endpoint}: ${body.slice(0, 200)}`);
+  }
+
+  return res.json();
+}
+
+async function getSeasonId(tournamentId: number): Promise<number> {
+  const cached = seasonIdCache.get(tournamentId);
+  if (cached && Date.now() - cached.cachedAt < SEASON_CACHE_TTL_MS) {
+    return cached.id;
+  }
+
+  const data = await rapidApiRequest(`/tournaments/seasons?tournamentId=${tournamentId}`);
+  const seasons: Array<{ id: number }> = Array.isArray(data.seasons) ? data.seasons : [];
+
+  if (seasons.length === 0) {
+    throw new Error(`No seasons returned for tournamentId ${tournamentId}`);
+  }
+
+  // Seasons are returned newest-first; the first entry is the current season.
+  const id = seasons[0].id;
+  seasonIdCache.set(tournamentId, { id, cachedAt: Date.now() });
+  return id;
+}
+
+/**
+ * Fetch events for a single tournament via the RapidAPI `/tournaments/events`
+ * endpoint and return only those matching the target date.  We check up to
+ * MAX_PAGES consecutive pages so that we handle any offset from the season
+ * start without an excessive number of API calls.
+ */
+const MAX_PAGES = 5;
+
+async function fetchRapidApiTournamentEvents(
+  tournamentId: number,
+  seasonId: number,
+  targetDate: string,
+): Promise<any[]> {
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await rapidApiRequest(
+      `/tournaments/events?tournamentId=${tournamentId}&seasonId=${seasonId}&page=${page}`,
+    );
+    const events: any[] = Array.isArray(data.events) ? data.events : [];
+
+    if (events.length === 0) break;
+
+    const dateMatches = events.filter((event) => {
+      if (!event.startTimestamp) return false;
+      const eventDate = new Date(event.startTimestamp * 1000).toLocaleDateString('en-CA', {
+        timeZone: 'Europe/London',
+      });
+      return eventDate === targetDate;
+    });
+
+    if (dateMatches.length > 0) return dateMatches;
+
+    // If the latest event on this page is still before the target date, keep
+    // paginating forward; otherwise stop early.
+    const latestTimestamp = Math.max(...events.map((e: any) => e.startTimestamp || 0));
+    const latestDate = new Date(latestTimestamp * 1000).toLocaleDateString('en-CA', {
+      timeZone: 'Europe/London',
+    });
+    if (latestDate > targetDate) break;
+  }
+
+  return [];
+}
+
+/**
+ * Fetch all fixtures for `date` using the RapidAPI tournament-events endpoint.
+ * Fetches season IDs and events for all target leagues in parallel.
+ */
+async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): Promise<APIFixture[]> {
+  const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
+  console.log(`[RapidAPI] Fetching fixtures for ${date} at ${targetKickoffTime}`);
+
+  const tournamentIds = Object.values(SOFASCORE_TOURNAMENTS).map((t) => t.id);
+
+  // Resolve season IDs in parallel.
+  const seasonResults = await Promise.allSettled(
+    tournamentIds.map((id) => getSeasonId(id)),
+  );
+
+  // Fetch events per tournament in parallel.
+  const eventResults = await Promise.allSettled(
+    tournamentIds.map((id, idx) => {
+      const seasonResult = seasonResults[idx];
+      if (seasonResult.status === 'rejected') {
+        console.warn(`[RapidAPI] Skipping tournament ${id} – season lookup failed: ${seasonResult.reason}`);
+        return Promise.resolve([]);
+      }
+      return fetchRapidApiTournamentEvents(id, seasonResult.value, date);
+    }),
+  );
+
+  const allFixtures: APIFixture[] = [];
+
+  for (let i = 0; i < tournamentIds.length; i++) {
+    const tournamentId = tournamentIds[i];
+    const result = eventResults[i];
+
+    if (result.status === 'rejected') {
+      console.error(`[RapidAPI] Events fetch failed for tournament ${tournamentId}:`, result.reason);
+      continue;
+    }
+
+    const events: any[] = result.value;
+    const tournamentInfo = SOFASCORE_TOURNAMENTS[String(tournamentId)];
+
+    for (const event of events) {
+      if (event.status?.type === 'postponed') continue;
+
+      const kickOff = new Date(event.startTimestamp * 1000);
+      const ukTime = kickOff.toLocaleTimeString('en-GB', {
+        timeZone: 'Europe/London',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+
+      if (ukTime !== targetKickoffTime) continue;
+
+      const leagueName = tournamentInfo?.name || event.tournament?.uniqueTournament?.name || 'Unknown';
+
+      allFixtures.push({
+        fixture: {
+          id: event.id,
+          date: kickOff.toISOString(),
+          status: {
+            short: event.status?.type === 'finished' ? 'FT' :
+                   event.status?.type === 'inprogress' ? 'LIVE' : 'NS',
+            long: event.status?.type === 'finished' ? 'Match Finished' :
+                  event.status?.type === 'inprogress' ? 'In Progress' : 'Not Started',
+          },
+        },
+        league: {
+          id: tournamentId,
+          name: leagueName,
+        },
+        teams: {
+          home: {
+            id: event.homeTeam?.id || 0,
+            name: event.homeTeam?.name || '',
+            logo: `https://api.sofascore.com/api/v1/team/${event.homeTeam?.id}/image`,
+          },
+          away: {
+            id: event.awayTeam?.id || 0,
+            name: event.awayTeam?.name || '',
+            logo: `https://api.sofascore.com/api/v1/team/${event.awayTeam?.id}/image`,
+          },
+        },
+        goals: {
+          home: event.homeScore?.current ?? null,
+          away: event.awayScore?.current ?? null,
+        },
+      });
+    }
+  }
+
+  console.log(`[RapidAPI] Total ${targetKickoffTime} fixtures for ${date}: ${allFixtures.length}`);
+  return allFixtures;
 }
 
 async function apiRequest(endpoint: string, retries = 3) {
@@ -120,8 +313,20 @@ async function apiRequest(endpoint: string, retries = 3) {
 
 /**
  * Fetch kick-offs for all tracked leagues on a given date/time (UK local time).
+ * When USE_RAPIDAPI=true and RAPIDAPI_KEY is set, uses the RapidAPI
+ * `/tournaments/events` endpoint instead of the unofficial SofaScore API.
  */
 export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00'): Promise<APIFixture[]> {
+  const useRapidApi = process.env.USE_RAPIDAPI === 'true' && !!process.env.RAPIDAPI_KEY;
+
+  if (useRapidApi) {
+    try {
+      return await fetchRapidApiFixturesForSlot(date, kickoffTime);
+    } catch (err) {
+      console.error('[RapidAPI] fetchRapidApiFixturesForSlot failed, falling back to SofaScore:', err);
+    }
+  }
+
   const allFixtures: APIFixture[] = [];
   const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
   

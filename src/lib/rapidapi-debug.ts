@@ -1,10 +1,11 @@
-const RAPIDAPI_HOST = 'sofascore6.p.rapidapi.com';
+const RAPIDAPI_HOST = 'sofascore.p.rapidapi.com';
 const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type RapidApiAttempt = {
   host: string;
+  endpoint: string;
   status?: number;
   ok: boolean;
   error?: string;
@@ -21,6 +22,12 @@ type SofaScoreEvent = {
     name?: string;
   };
   status?: { type?: string };
+};
+
+type SofaScoreSeason = {
+  id: number;
+  year?: string;
+  name?: string;
 };
 
 function getUkToday() {
@@ -61,15 +68,31 @@ function summarizeEvents(events: SofaScoreEvent[]) {
   });
 }
 
-export async function fetchRapidApiDebugFixtures(date?: string) {
+async function rapidApiFetch(endpoint: string, apiKey: string): Promise<{ ok: boolean; status: number; text: string }> {
+  const url = `${RAPIDAPI_BASE}${endpoint}`;
+  const response = await fetch(url, {
+    headers: {
+      'x-rapidapi-host': RAPIDAPI_HOST,
+      'x-rapidapi-key': apiKey,
+    },
+    cache: 'no-store',
+  });
+  const text = await response.text();
+  return { ok: response.ok, status: response.status, text };
+}
+
+export async function fetchRapidApiDebugFixtures(date?: string, tournamentId?: number) {
   const apiKey = process.env.RAPIDAPI_KEY;
 
   // Validate the date so user input cannot alter the request path.
   const targetDate =
     date && DATE_RE.test(date) ? date : getUkToday();
 
-  const endpoint = `/sport/football/scheduled-events/${targetDate}`;
-  const url = `${RAPIDAPI_BASE}${endpoint}`;
+  // Default to Premier League (17) if no tournamentId supplied.
+  const targetTournamentId = Number.isInteger(tournamentId) && (tournamentId as number) > 0
+    ? (tournamentId as number)
+    : 17;
+
   const attempts: RapidApiAttempt[] = [];
 
   if (!apiKey) {
@@ -77,73 +100,134 @@ export async function fetchRapidApiDebugFixtures(date?: string) {
       ok: false,
       source: 'rapidapi',
       date: targetDate,
-      endpoint,
+      tournamentId: targetTournamentId,
       successfulHost: null,
       attempts,
       error: 'RAPIDAPI_KEY environment variable is not set',
     };
   }
 
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        'x-rapidapi-host': RAPIDAPI_HOST,
-        'x-rapidapi-key': apiKey,
-      },
-      cache: 'no-store',
-    });
+  // Step 1 – resolve the current season for the tournament.
+  const seasonsEndpoint = `/tournaments/seasons?tournamentId=${targetTournamentId}`;
+  let seasonId: number;
 
-    const text = await response.text();
+  try {
+    const seasonsResult = await rapidApiFetch(seasonsEndpoint, apiKey);
     attempts.push({
       host: RAPIDAPI_BASE,
-      status: response.status,
-      ok: response.ok,
-      snippet: text.slice(0, 300),
+      endpoint: seasonsEndpoint,
+      status: seasonsResult.status,
+      ok: seasonsResult.ok,
+      snippet: seasonsResult.text.slice(0, 300),
     });
 
-    if (!response.ok) {
+    if (!seasonsResult.ok) {
       return {
         ok: false,
         source: 'rapidapi',
         date: targetDate,
-        endpoint,
+        tournamentId: targetTournamentId,
         successfulHost: null,
         attempts,
-        error: `RapidAPI responded with status ${response.status}: ${text.slice(0, 200)}`,
+        error: `RapidAPI seasons call responded with status ${seasonsResult.status}: ${seasonsResult.text.slice(0, 200)}`,
       };
     }
 
-    const data = JSON.parse(text) as { events?: SofaScoreEvent[] };
-    const events = Array.isArray(data.events) ? data.events : [];
+    const seasonsData = JSON.parse(seasonsResult.text) as { seasons?: SofaScoreSeason[] };
+    const seasons = Array.isArray(seasonsData.seasons) ? seasonsData.seasons : [];
+
+    if (seasons.length === 0) {
+      return {
+        ok: false,
+        source: 'rapidapi',
+        date: targetDate,
+        tournamentId: targetTournamentId,
+        successfulHost: null,
+        attempts,
+        error: `No seasons returned for tournamentId ${targetTournamentId}`,
+      };
+    }
+
+    // Seasons are returned newest-first; the first entry is the current season.
+    seasonId = seasons[0].id;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    attempts.push({ host: RAPIDAPI_BASE, endpoint: seasonsEndpoint, ok: false, error: message });
+    return {
+      ok: false,
+      source: 'rapidapi',
+      date: targetDate,
+      tournamentId: targetTournamentId,
+      successfulHost: null,
+      attempts,
+      error: `RapidAPI seasons request failed: ${message}`,
+    };
+  }
+
+  // Step 2 – fetch events for the tournament/season (page 0 = current/next round).
+  const eventsEndpoint = `/tournaments/events?tournamentId=${targetTournamentId}&seasonId=${seasonId}&page=0`;
+
+  try {
+    const eventsResult = await rapidApiFetch(eventsEndpoint, apiKey);
+    attempts.push({
+      host: RAPIDAPI_BASE,
+      endpoint: eventsEndpoint,
+      status: eventsResult.status,
+      ok: eventsResult.ok,
+      snippet: eventsResult.text.slice(0, 300),
+    });
+
+    if (!eventsResult.ok) {
+      return {
+        ok: false,
+        source: 'rapidapi',
+        date: targetDate,
+        tournamentId: targetTournamentId,
+        seasonId,
+        successfulHost: null,
+        attempts,
+        error: `RapidAPI events call responded with status ${eventsResult.status}: ${eventsResult.text.slice(0, 200)}`,
+      };
+    }
+
+    const eventsData = JSON.parse(eventsResult.text) as { events?: SofaScoreEvent[] };
+    const allEvents = Array.isArray(eventsData.events) ? eventsData.events : [];
+
+    // Optionally filter to the requested date.
+    const filteredEvents = allEvents.filter((event) => {
+      if (!event.startTimestamp) return true;
+      const eventDate = new Date(event.startTimestamp * 1000)
+        .toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+      return eventDate === targetDate;
+    });
 
     return {
       ok: true,
       source: 'rapidapi',
       date: targetDate,
-      endpoint,
+      tournamentId: targetTournamentId,
+      seasonId,
+      eventsEndpoint,
       successfulHost: RAPIDAPI_BASE,
       attempts,
-      totalEvents: events.length,
-      fixtures: summarizeEvents(events),
-      raw: data,
+      totalEvents: allEvents.length,
+      filteredEvents: filteredEvents.length,
+      fixtures: summarizeEvents(filteredEvents),
+      raw: eventsData,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    attempts.push({
-      host: RAPIDAPI_BASE,
-      ok: false,
-      error: message,
-    });
+    attempts.push({ host: RAPIDAPI_BASE, endpoint: eventsEndpoint, ok: false, error: message });
 
     return {
       ok: false,
       source: 'rapidapi',
       date: targetDate,
-      endpoint,
+      tournamentId: targetTournamentId,
+      seasonId,
       successfulHost: null,
       attempts,
-      error: `RapidAPI request failed: ${message}`,
+      error: `RapidAPI events request failed: ${message}`,
     };
   }
 }
