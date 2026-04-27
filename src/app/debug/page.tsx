@@ -187,8 +187,9 @@ export default function DebugPage() {
       const response = await fetch(`/api/debug/rapidapi?date=${date}`);
       const data = await response.json();
       setRapidApiResult(data);
-    } catch (error: any) {
-      setRapidApiResult({ ok: false, source: 'rapidapi', date, error: error.message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRapidApiResult({ ok: false, source: 'rapidapi', date, error: message });
     } finally {
       setLoading(null);
     }

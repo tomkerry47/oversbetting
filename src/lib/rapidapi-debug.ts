@@ -1,12 +1,26 @@
 const RAPIDAPI_HOST = 'sofascore6.p.rapidapi.com';
 const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}/api/sofascore/v1`;
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 type RapidApiAttempt = {
   host: string;
   status?: number;
   ok: boolean;
   error?: string;
   snippet?: string;
+};
+
+type SofaScoreEvent = {
+  id?: number;
+  startTimestamp?: number;
+  homeTeam?: { name?: string };
+  awayTeam?: { name?: string };
+  tournament?: {
+    uniqueTournament?: { name?: string; id?: number };
+    name?: string;
+  };
+  status?: { type?: string };
 };
 
 function getUkToday() {
@@ -21,7 +35,7 @@ function getUkToday() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function summarizeEvents(events: any[]) {
+function summarizeEvents(events: SofaScoreEvent[]) {
   return events.map((event) => {
     const kickOff = event?.startTimestamp
       ? new Date(event.startTimestamp * 1000)
@@ -49,7 +63,11 @@ function summarizeEvents(events: any[]) {
 
 export async function fetchRapidApiDebugFixtures(date?: string) {
   const apiKey = process.env.RAPIDAPI_KEY;
-  const targetDate = date || getUkToday();
+
+  // Validate the date so user input cannot alter the request path.
+  const targetDate =
+    date && DATE_RE.test(date) ? date : getUkToday();
+
   const endpoint = `/sport/football/scheduled-events/${targetDate}`;
   const url = `${RAPIDAPI_BASE}${endpoint}`;
   const attempts: RapidApiAttempt[] = [];
@@ -96,7 +114,7 @@ export async function fetchRapidApiDebugFixtures(date?: string) {
       };
     }
 
-    const data = JSON.parse(text);
+    const data = JSON.parse(text) as { events?: SofaScoreEvent[] };
     const events = Array.isArray(data.events) ? data.events : [];
 
     return {
@@ -110,11 +128,12 @@ export async function fetchRapidApiDebugFixtures(date?: string) {
       fixtures: summarizeEvents(events),
       raw: data,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     attempts.push({
       host: RAPIDAPI_BASE,
       ok: false,
-      error: error?.message || String(error),
+      error: message,
     });
 
     return {
@@ -124,7 +143,7 @@ export async function fetchRapidApiDebugFixtures(date?: string) {
       endpoint,
       successfulHost: null,
       attempts,
-      error: `RapidAPI request failed: ${error?.message || String(error)}`,
+      error: `RapidAPI request failed: ${message}`,
     };
   }
 }
