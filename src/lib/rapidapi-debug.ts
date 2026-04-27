@@ -1,5 +1,5 @@
 const RAPIDAPI_HOST = 'sofascore6.p.rapidapi.com';
-const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}/api/sofascore/v1`;
+const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
