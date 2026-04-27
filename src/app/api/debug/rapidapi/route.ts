@@ -7,7 +7,9 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date') || undefined;
-  const result = await fetchRapidApiDebugFixtures(date);
+  const tournamentIdParam = searchParams.get('tournamentId');
+  const tournamentId = tournamentIdParam ? parseInt(tournamentIdParam, 10) : undefined;
+  const result = await fetchRapidApiDebugFixtures(date, tournamentId);
 
   return NextResponse.json(result, {
     status: result.ok ? 200 : 502,
