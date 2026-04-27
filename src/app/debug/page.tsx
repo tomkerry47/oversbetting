@@ -125,7 +125,8 @@ export default function DebugPage() {
   const [date, setDate] = useState(todayInputValue());
   const [vercelResult, setVercelResult] = useState<DebugResult | null>(null);
   const [supabaseResult, setSupabaseResult] = useState<DebugResult | null>(null);
-  const [loading, setLoading] = useState<'vercel' | 'supabase' | null>(null);
+  const [rapidApiResult, setRapidApiResult] = useState<DebugResult | null>(null);
+  const [loading, setLoading] = useState<'vercel' | 'supabase' | 'rapidapi' | null>(null);
 
   const supabaseFunctionUrl = useMemo(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -178,13 +179,29 @@ export default function DebugPage() {
     }
   };
 
+  const runRapidApiProbe = async () => {
+    setLoading('rapidapi');
+    setRapidApiResult(null);
+
+    try {
+      const response = await fetch(`/api/debug/rapidapi?date=${date}`);
+      const data = await response.json();
+      setRapidApiResult(data);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRapidApiResult({ ok: false, source: 'rapidapi', date, error: message });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="card space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-white">🧪 Debug</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Basic SofaScore scheduled-events checks from Vercel and Supabase Edge Functions.
+            SofaScore scheduled-events checks via Vercel, Supabase Edge Functions, and RapidAPI.
           </p>
         </div>
 
@@ -200,7 +217,7 @@ export default function DebugPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <button
             type="button"
             onClick={runVercelProbe}
@@ -216,6 +233,14 @@ export default function DebugPage() {
             className="btn-secondary"
           >
             {loading === 'supabase' ? 'Calling Supabase...' : 'Call Supabase Function'}
+          </button>
+          <button
+            type="button"
+            onClick={runRapidApiProbe}
+            disabled={loading !== null}
+            className="btn-primary"
+          >
+            {loading === 'rapidapi' ? 'Calling RapidAPI...' : 'Test RapidAPI'}
           </button>
         </div>
       </div>
@@ -233,8 +258,19 @@ export default function DebugPage() {
         </p>
       </div>
 
+      <div className="card space-y-3">
+        <h2 className="text-lg font-bold text-white">RapidAPI setup</h2>
+        <p className="text-sm text-slate-300">
+          The <strong className="text-white">Test RapidAPI</strong> button calls{' '}
+          <code>sofascore6.p.rapidapi.com</code> for the chosen date. Set the{' '}
+          <code>RAPIDAPI_KEY</code> environment variable (Vercel → Settings → Environment Variables)
+          to your RapidAPI key before deploying.
+        </p>
+      </div>
+
       <ResultPanel title="Vercel result" result={vercelResult} />
       <ResultPanel title="Supabase function result" result={supabaseResult} />
+      <ResultPanel title="RapidAPI result" result={rapidApiResult} />
     </div>
   );
 }
