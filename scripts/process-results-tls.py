@@ -37,9 +37,15 @@ API_BASES = (
     "https://api.sofavpn.com/api/v1",
     "https://www.sofavpn.com/api/v1",
 )
+RAPIDAPI_HOST = "sofascore.p.rapidapi.com"
+RAPIDAPI_BASE = f"https://{RAPIDAPI_HOST}"
 DEFAULT_RETRIES = 3
 GOAL_THRESHOLD = 2
 COMPLETED_STATUSES = {"FT", "AET", "PEN"}
+
+
+def use_rapidapi() -> bool:
+    return os.getenv("USE_RAPIDAPI", "true").strip().lower() != "false" and bool(os.getenv("RAPIDAPI_KEY"))
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,7 +66,39 @@ def get_tls_session() -> FetcherSession:
     return FetcherSession(impersonate="chrome", stealthy_headers=True)
 
 
+def fetch_event_result_rapidapi(fixture_id: int) -> Dict[str, Any]:
+    api_key = os.getenv("RAPIDAPI_KEY")
+    if not api_key:
+        raise RuntimeError("RAPIDAPI_KEY environment variable is not set")
+
+    endpoint = f"/event/{fixture_id}"
+    headers = {
+        "x-rapidapi-host": RAPIDAPI_HOST,
+        "x-rapidapi-key": api_key,
+    }
+    last_error: Exception | None = None
+
+    for attempt in range(DEFAULT_RETRIES):
+        response = requests.get(f"{RAPIDAPI_BASE}{endpoint}", headers=headers, timeout=45)
+        if response.status_code == 200:
+            payload = response.json()
+            return payload.get("event", {})
+
+        last_error = RuntimeError(
+            f"RapidAPI result error {response.status_code} for {endpoint}: {response.text[:250]}"
+        )
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < DEFAULT_RETRIES - 1:
+            time.sleep(1.5 + attempt)
+            continue
+        break
+
+    raise last_error or RuntimeError(f"RapidAPI request failed for {endpoint}")
+
+
 def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
+    if use_rapidapi():
+        return fetch_event_result_rapidapi(fixture_id)
+
     headers = {
         "Accept": "*/*",
         "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
@@ -164,7 +202,10 @@ def main() -> int:
     db = SupabaseRest(supabase_url, service_role)
     week = find_week(db, args.weekId)
     week_id = week["id"]
-    print(f"[Results] Processing week {week_id} ({week['saturday_date']})")
+    print(
+        f"[Results] Processing week {week_id} ({week['saturday_date']}) "
+        f"using {'RapidAPI' if use_rapidapi() else 'SofaScore direct'}"
+    )
 
     selections = db.get("selections", {"week_id": f"eq.{week_id}", "select": "*"})
     if not selections:

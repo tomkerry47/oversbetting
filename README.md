@@ -14,7 +14,9 @@ Copy `.env.local.example` to `.env.local` and fill in:
 ```
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-FOOTBALL_API_KEY=8bb20a808798c716dd25fb918ff591b2
+RAPIDAPI_KEY=your-rapidapi-key
+USE_RAPIDAPI=true
+ENRICH_FIXTURES=false
 ```
 
 ### 3. Install & Run
@@ -27,6 +29,7 @@ npm run dev
 - Push to GitHub
 - Connect repo to Vercel
 - Add the same environment variables in Vercel dashboard
+- Add `RAPIDAPI_KEY` to GitHub Actions secrets for the scheduled/manual fixture and results workflows
 - Deploy!
 
 ## Features

@@ -75,6 +75,10 @@ async function rapidApiRequest(endpoint: string) {
   return res.json();
 }
 
+function shouldUseRapidApi(): boolean {
+  return process.env.USE_RAPIDAPI !== 'false' && !!process.env.RAPIDAPI_KEY;
+}
+
 async function getSeasonId(tournamentId: number): Promise<number> {
   const cached = seasonIdCache.get(tournamentId);
   if (cached && Date.now() - cached.cachedAt < SEASON_CACHE_TTL_MS) {
@@ -138,94 +142,68 @@ async function fetchRapidApiTournamentEvents(
 }
 
 /**
- * Fetch all fixtures for `date` using the RapidAPI tournament-events endpoint.
- * Fetches season IDs and events for all target leagues in parallel.
+ * Fetch all fixtures for `date` using RapidAPI's scheduled-events endpoint.
+ * This keeps manual refreshes to one SofaScore data call before local filtering.
  */
 async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): Promise<APIFixture[]> {
   const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
   console.log(`[RapidAPI] Fetching fixtures for ${date} at ${targetKickoffTime}`);
 
-  const tournamentIds = Object.values(SOFASCORE_TOURNAMENTS).map((t) => t.id);
-
-  // Resolve season IDs in parallel.
-  const seasonResults = await Promise.allSettled(
-    tournamentIds.map((id) => getSeasonId(id)),
-  );
-
-  // Fetch events per tournament in parallel.
-  const eventResults = await Promise.allSettled(
-    tournamentIds.map((id, idx) => {
-      const seasonResult = seasonResults[idx];
-      if (seasonResult.status === 'rejected') {
-        console.warn(`[RapidAPI] Skipping tournament ${id} – season lookup failed: ${seasonResult.reason}`);
-        return Promise.resolve([]);
-      }
-      return fetchRapidApiTournamentEvents(id, seasonResult.value, date);
-    }),
-  );
-
+  const data = await rapidApiRequest(`/sport/football/scheduled-events/${date}`);
+  const events: any[] = Array.isArray(data.events) ? data.events : [];
+  const targetLeagueIds = Object.keys(SOFASCORE_TOURNAMENTS).map(Number);
   const allFixtures: APIFixture[] = [];
 
-  for (let i = 0; i < tournamentIds.length; i++) {
-    const tournamentId = tournamentIds[i];
-    const result = eventResults[i];
+  for (const event of events) {
+    const leagueId = event.tournament?.uniqueTournament?.id;
 
-    if (result.status === 'rejected') {
-      console.error(`[RapidAPI] Events fetch failed for tournament ${tournamentId}:`, result.reason);
-      continue;
-    }
+    if (!targetLeagueIds.includes(leagueId)) continue;
+    if (event.status?.type === 'postponed') continue;
 
-    const events: any[] = result.value;
-    const tournamentInfo = SOFASCORE_TOURNAMENTS[String(tournamentId)];
+    const kickOff = new Date(event.startTimestamp * 1000);
+    const ukTime = kickOff.toLocaleTimeString('en-GB', {
+      timeZone: 'Europe/London',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
 
-    for (const event of events) {
-      if (event.status?.type === 'postponed') continue;
+    if (ukTime !== targetKickoffTime) continue;
 
-      const kickOff = new Date(event.startTimestamp * 1000);
-      const ukTime = kickOff.toLocaleTimeString('en-GB', {
-        timeZone: 'Europe/London',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
+    const leagueName = SOFASCORE_TOURNAMENTS[String(leagueId)]?.name || event.tournament?.uniqueTournament?.name || 'Unknown';
 
-      if (ukTime !== targetKickoffTime) continue;
-
-      const leagueName = tournamentInfo?.name || event.tournament?.uniqueTournament?.name || 'Unknown';
-
-      allFixtures.push({
-        fixture: {
-          id: event.id,
-          date: kickOff.toISOString(),
-          status: {
-            short: event.status?.type === 'finished' ? 'FT' :
-                   event.status?.type === 'inprogress' ? 'LIVE' : 'NS',
-            long: event.status?.type === 'finished' ? 'Match Finished' :
-                  event.status?.type === 'inprogress' ? 'In Progress' : 'Not Started',
-          },
+    allFixtures.push({
+      fixture: {
+        id: event.id,
+        date: kickOff.toISOString(),
+        status: {
+          short: event.status?.type === 'finished' ? 'FT' :
+                 event.status?.type === 'inprogress' ? 'LIVE' : 'NS',
+          long: event.status?.type === 'finished' ? 'Match Finished' :
+                event.status?.type === 'inprogress' ? 'In Progress' : 'Not Started',
         },
-        league: {
-          id: tournamentId,
-          name: leagueName,
+      },
+      league: {
+        id: leagueId,
+        name: leagueName,
+      },
+      teams: {
+        home: {
+          id: event.homeTeam?.id || 0,
+          name: event.homeTeam?.name || '',
+          logo: `https://api.sofascore.com/api/v1/team/${event.homeTeam?.id}/image`,
         },
-        teams: {
-          home: {
-            id: event.homeTeam?.id || 0,
-            name: event.homeTeam?.name || '',
-            logo: `https://api.sofascore.com/api/v1/team/${event.homeTeam?.id}/image`,
-          },
-          away: {
-            id: event.awayTeam?.id || 0,
-            name: event.awayTeam?.name || '',
-            logo: `https://api.sofascore.com/api/v1/team/${event.awayTeam?.id}/image`,
-          },
+        away: {
+          id: event.awayTeam?.id || 0,
+          name: event.awayTeam?.name || '',
+          logo: `https://api.sofascore.com/api/v1/team/${event.awayTeam?.id}/image`,
         },
-        goals: {
-          home: event.homeScore?.current ?? null,
-          away: event.awayScore?.current ?? null,
-        },
-      });
-    }
+      },
+      goals: {
+        home: event.homeScore?.current ?? null,
+        away: event.awayScore?.current ?? null,
+      },
+    });
   }
 
   console.log(`[RapidAPI] Total ${targetKickoffTime} fixtures for ${date}: ${allFixtures.length}`);
@@ -233,6 +211,10 @@ async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): 
 }
 
 async function apiRequest(endpoint: string, retries = 3) {
+  if (shouldUseRapidApi()) {
+    return rapidApiRequest(endpoint);
+  }
+
   const url = `${API_BASE}${endpoint}`;
   const useBrowserApi = process.env.USE_BROWSER_API === 'true';
 
@@ -317,9 +299,7 @@ async function apiRequest(endpoint: string, retries = 3) {
  * `/tournaments/events` endpoint instead of the unofficial SofaScore API.
  */
 export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00'): Promise<APIFixture[]> {
-  const useRapidApi = process.env.USE_RAPIDAPI !== 'false' && !!process.env.RAPIDAPI_KEY;
-
-  if (useRapidApi) {
+  if (shouldUseRapidApi()) {
     try {
       return await fetchRapidApiFixturesForSlot(date, kickoffTime);
     } catch (err) {

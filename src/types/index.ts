@@ -7,21 +7,22 @@ export type PlayerName = (typeof PLAYERS)[number];
 
 export const MAX_SELECTIONS_PER_PLAYER = 2;
 
-// English top 5 + Scottish top 3 league IDs (api-football)
+// SofaScore tournament IDs for the tracked England and Scotland competitions.
 export const LEAGUE_IDS = {
   // Cups (priority display)
   19: 'FA Cup',
   347: 'Scottish Cup',
   // England
-  39: 'Premier League',
-  40: 'Championship',
-  41: 'League One',
-  42: 'League Two',
-  43: 'National League',
+  17: 'Premier League',
+  18: 'Championship',
+  24: 'League One',
+  25: 'League Two',
+  173: 'National League',
   // Scotland
-  179: 'Scottish Premiership',
-  180: 'Scottish Championship',
-  181: 'Scottish League One',
+  36: 'Scottish Premiership',
+  206: 'Scottish Championship',
+  207: 'Scottish League One',
+  209: 'Scottish League Two',
 } as const;
 
 export const GOAL_THRESHOLD = 2; // "over 2.5 goals" = 3+ total

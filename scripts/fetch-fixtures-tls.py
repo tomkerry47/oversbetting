@@ -36,6 +36,8 @@ API_BASES = (
     "https://api.sofavpn.com/api/v1",
     "https://www.sofavpn.com/api/v1",
 )
+RAPIDAPI_HOST = "sofascore.p.rapidapi.com"
+RAPIDAPI_BASE = f"https://{RAPIDAPI_HOST}"
 DEFAULT_RETRIES = 3
 UK_TZ = ZoneInfo("Europe/London")
 
@@ -54,6 +56,55 @@ SOFASCORE_TOURNAMENTS: Dict[int, str] = {
 }
 
 STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
+
+
+def use_rapidapi() -> bool:
+    return os.getenv("USE_RAPIDAPI", "true").strip().lower() != "false" and bool(os.getenv("RAPIDAPI_KEY"))
+
+
+def enrich_fixtures_enabled() -> bool:
+    return os.getenv("ENRICH_FIXTURES", "false").strip().lower() in {"true", "1", "yes"}
+
+
+def rapidapi_get(endpoint: str, retries: int = DEFAULT_RETRIES) -> Dict[str, Any]:
+    api_key = os.getenv("RAPIDAPI_KEY")
+    if not api_key:
+        raise RuntimeError("RAPIDAPI_KEY environment variable is not set")
+
+    url = f"{RAPIDAPI_BASE}{endpoint}"
+    headers = {
+        "x-rapidapi-host": RAPIDAPI_HOST,
+        "x-rapidapi-key": api_key,
+    }
+    last_error: Exception | None = None
+
+    for attempt in range(retries):
+        response = requests.get(url, headers=headers, timeout=45)
+        if response.status_code == 200:
+            return response.json()
+
+        last_error = RuntimeError(
+            f"RapidAPI error {response.status_code} for {endpoint}: {response.text[:300]}"
+        )
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < retries - 1:
+            time.sleep(1.5 + attempt)
+            continue
+        break
+
+    raise last_error or RuntimeError(f"RapidAPI request failed for {endpoint}")
+
+
+def set_default_insights(row: Dict[str, Any]) -> None:
+    row["home_form"] = []
+    row["away_form"] = []
+    row["odds_over_25"] = None
+    row["odds_under_25"] = None
+    row["home_team_position"] = None
+    row["away_team_position"] = None
+    row["is_star_pick"] = False
+    row["star_rank"] = None
+    row["star_score"] = None
+    row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
 
 
 def parse_args() -> argparse.Namespace:
@@ -143,6 +194,9 @@ def get_tls_session() -> FetcherSession:
 
 
 def sofa_get(session: Any, endpoint: str, retries: int = DEFAULT_RETRIES) -> Dict[str, Any]:
+    if use_rapidapi():
+        return rapidapi_get(endpoint, retries)
+
     last_error: Exception | None = None
     for base_url in API_BASES:
         url = f"{base_url}{endpoint}"
@@ -433,16 +487,7 @@ def enrich_fixture_row(session: Any, row: Dict[str, Any]) -> None:
     league_id = row.get("league_id")
 
     if not fixture_id or not home_team_id or not away_team_id or not league_id:
-        row["home_form"] = []
-        row["away_form"] = []
-        row["odds_over_25"] = None
-        row["odds_under_25"] = None
-        row["home_team_position"] = None
-        row["away_team_position"] = None
-        row["is_star_pick"] = False
-        row["star_rank"] = None
-        row["star_score"] = None
-        row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        set_default_insights(row)
         return
 
     fixture_data = sofa_get(session, f"/event/{fixture_id}")
@@ -569,7 +614,8 @@ def main() -> int:
     week_number = calculate_week_number(saturday_date)
     print(
         f"Fetching fixtures for target_date={target_date}, kickoff={target_kickoff_time}, "
-        f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}"
+        f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}, "
+        f"source={'RapidAPI' if use_rapidapi() else 'SofaScore direct'}, enrich={enrich_fixtures_enabled()}"
     )
 
     tls_session_factory = get_tls_session()
@@ -581,27 +627,23 @@ def main() -> int:
         if not fixture_rows:
             return 0
 
-        # Enrich each fixture with cached form and odds for instant UI dropdown details.
-        for i, row in enumerate(fixture_rows):
-            fixture_id = row.get("api_fixture_id")
-            try:
-                enrich_fixture_row(tls_session, row)
-                print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
-            except Exception as exc:
-                print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
-                row["home_form"] = []
-                row["away_form"] = []
-                row["odds_over_25"] = None
-                row["odds_under_25"] = None
-                row["home_team_position"] = None
-                row["away_team_position"] = None
-                row["is_star_pick"] = False
-                row["star_rank"] = None
-                row["star_score"] = None
-                row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-            time.sleep(0.4)
+        if enrich_fixtures_enabled():
+            # Enrich each fixture with cached form and odds for instant UI dropdown details.
+            for i, row in enumerate(fixture_rows):
+                fixture_id = row.get("api_fixture_id")
+                try:
+                    enrich_fixture_row(tls_session, row)
+                    print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
+                except Exception as exc:
+                    print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
+                    set_default_insights(row)
+                time.sleep(0.4)
+        else:
+            for row in fixture_rows:
+                set_default_insights(row)
 
-    apply_star_rankings(fixture_rows)
+    if enrich_fixtures_enabled():
+        apply_star_rankings(fixture_rows)
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
     print(f"Calculated star picks: {len(star_rows)} / {len(fixture_rows)} fixtures")
 

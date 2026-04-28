@@ -33,6 +33,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          USE_RAPIDAPI: "true"
           WEEK_ID: ${{ github.event.inputs.week_id }}
         run: |
           if [ -n "$WEEK_ID" ]; then
