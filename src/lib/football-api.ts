@@ -7,6 +7,7 @@ const API_BASE = 'https://api.sofascore.com/api/v1';
 // RapidAPI SofaScore host (requires RAPIDAPI_KEY)
 const RAPIDAPI_HOST = 'sofascore.p.rapidapi.com';
 const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`;
+const RAPIDAPI_FOOTBALL_CATEGORY_IDS = [1, 22]; // England, Scotland
 
 // Rotating user agents to appear more human
 const USER_AGENTS = [
@@ -149,8 +150,15 @@ async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): 
   const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
   console.log(`[RapidAPI] Fetching fixtures for ${date} at ${targetKickoffTime}`);
 
-  const data = await rapidApiRequest(`/sport/football/scheduled-events/${date}`);
-  const events: any[] = Array.isArray(data.events) ? data.events : [];
+  const eventGroups = await Promise.all(
+    RAPIDAPI_FOOTBALL_CATEGORY_IDS.map(async (categoryId) => {
+      const data = await rapidApiRequest(
+        `/tournaments/get-scheduled-events?categoryId=${categoryId}&date=${date}`,
+      );
+      return Array.isArray(data.events) ? data.events : [];
+    }),
+  );
+  const events: any[] = eventGroups.flat();
   const targetLeagueIds = Object.keys(SOFASCORE_TOURNAMENTS).map(Number);
   const allFixtures: APIFixture[] = [];
 
@@ -428,7 +436,9 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
     
     try {
       console.log(`[fetchFixtureResults] Fetching event ${fixtureId}`);
-      const data = await apiRequest(`/event/${fixtureId}`);
+      const data = shouldUseRapidApi()
+        ? await rapidApiRequest(`/matches/detail?matchId=${fixtureId}`)
+        : await apiRequest(`/event/${fixtureId}`);
       const event = data.event;
       
       if (event) {
@@ -500,7 +510,9 @@ export function getCurrentSeason(dateInput?: string | Date): string {
  */
 export async function fetchTeamForm(teamId: number): Promise<any[]> {
   try {
-    const data = await apiRequest(`/team/${teamId}/events/last/0`);
+    const data = shouldUseRapidApi()
+      ? await rapidApiRequest(`/teams/get-last-matches?teamId=${teamId}&pageIndex=0`)
+      : await apiRequest(`/team/${teamId}/events/last/0`);
     return (data.events || []).slice(0, 5);
   } catch (error) {
     console.error(`Error fetching form for team ${teamId}:`, error);
@@ -513,7 +525,9 @@ export async function fetchTeamForm(teamId: number): Promise<any[]> {
  */
 export async function fetchFixtureOdds(fixtureId: number): Promise<any> {
   try {
-    const data = await apiRequest(`/event/${fixtureId}/odds/1/all`);
+    const data = shouldUseRapidApi()
+      ? await rapidApiRequest(`/matches/get-all-odds?matchId=${fixtureId}`)
+      : await apiRequest(`/event/${fixtureId}/odds/1/all`);
     return data;
   } catch (error) {
     console.error(`Error fetching odds for fixture ${fixtureId}:`, error);

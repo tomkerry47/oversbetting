@@ -71,7 +71,7 @@ def fetch_event_result_rapidapi(fixture_id: int) -> Dict[str, Any]:
     if not api_key:
         raise RuntimeError("RAPIDAPI_KEY environment variable is not set")
 
-    endpoint = f"/event/{fixture_id}"
+    endpoint = f"/matches/detail?matchId={fixture_id}"
     headers = {
         "x-rapidapi-host": RAPIDAPI_HOST,
         "x-rapidapi-key": api_key,

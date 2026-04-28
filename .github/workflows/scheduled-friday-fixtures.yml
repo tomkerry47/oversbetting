@@ -50,4 +50,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           USE_RAPIDAPI: "true"
-          ENRICH_FIXTURES: "false"
+          ENRICH_FIXTURES: "true"
+          ENRICH_ODDS: "false"

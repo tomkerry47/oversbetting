@@ -16,7 +16,8 @@ NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 RAPIDAPI_KEY=your-rapidapi-key
 USE_RAPIDAPI=true
-ENRICH_FIXTURES=false
+ENRICH_FIXTURES=true
+ENRICH_ODDS=false
 ```
 
 ### 3. Install & Run
@@ -31,6 +32,12 @@ npm run dev
 - Add the same environment variables in Vercel dashboard
 - Add `RAPIDAPI_KEY` to GitHub Actions secrets for the scheduled/manual fixture and results workflows
 - Deploy!
+
+## SofaScore / RapidAPI Notes
+
+See `SOFASCORE_RAPIDAPI_MCP.md` for the working MCP health checks, direct
+RapidAPI fixture commands, local trigger commands, and the low-call enrichment
+plan.
 
 ## Features
 - Select from Saturday 15:00 kick-offs (English top 5 + Scottish top 3 leagues)

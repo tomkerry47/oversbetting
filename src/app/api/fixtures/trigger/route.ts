@@ -34,13 +34,15 @@ async function findLatestWorkflowRun(
 
 export async function POST(request: NextRequest) {
   try {
-    const { weekOffset, targetDate, kickoffTime, isCustom } = await request.json().catch(() => ({ weekOffset: 1 }));
+    const { weekOffset, targetDate, kickoffTime, isCustom, enrich, enrichOdds } = await request.json().catch(() => ({ weekOffset: 1 }));
     const workflowWeekOffset = Number.isFinite(Number(weekOffset))
       ? String(Math.max(0, Math.floor(Number(weekOffset))))
       : '1';
     const hasExplicitTarget = Boolean(targetDate && kickoffTime);
     const workflowIsCustom =
       typeof isCustom === 'boolean' ? String(isCustom) : hasExplicitTarget ? 'true' : 'false';
+    const workflowEnrich = typeof enrich === 'boolean' ? String(enrich) : 'true';
+    const workflowEnrichOdds = typeof enrichOdds === 'boolean' ? String(enrichOdds) : 'false';
 
     const token = process.env.GITHUB_ACTIONS_TRIGGER_TOKEN;
     const owner = process.env.GITHUB_REPO_OWNER || process.env.VERCEL_GIT_REPO_OWNER;
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest) {
         week_offset: workflowWeekOffset,
         ...(hasExplicitTarget ? { target_date: String(targetDate), kickoff_time: String(kickoffTime) } : {}),
         is_custom: workflowIsCustom,
+        enrich: workflowEnrich,
+        enrich_odds: workflowEnrichOdds,
       },
     };
 
@@ -104,6 +108,8 @@ export async function POST(request: NextRequest) {
       targetDate: hasExplicitTarget ? String(targetDate) : null,
       kickoffTime: hasExplicitTarget ? String(kickoffTime) : null,
       isCustom: workflowIsCustom,
+      enrich: workflowEnrich,
+      enrichOdds: workflowEnrichOdds,
       runId,
     });
   } catch (error: any) {
