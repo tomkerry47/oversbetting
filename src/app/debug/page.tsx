@@ -201,7 +201,7 @@ export default function DebugPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">🧪 Debug</h1>
           <p className="mt-1 text-sm text-slate-400">
-            SofaScore scheduled-events checks via Vercel, Supabase Edge Functions, and RapidAPI.
+            Fixture source checks via Vercel, Supabase Edge Functions, and api-football.com.
           </p>
         </div>
 
@@ -240,7 +240,7 @@ export default function DebugPage() {
             disabled={loading !== null}
             className="btn-primary"
           >
-            {loading === 'rapidapi' ? 'Calling RapidAPI...' : 'Test RapidAPI'}
+            {loading === 'rapidapi' ? 'Calling api-football...' : 'Test api-football'}
           </button>
         </div>
       </div>
@@ -259,18 +259,18 @@ export default function DebugPage() {
       </div>
 
       <div className="card space-y-3">
-        <h2 className="text-lg font-bold text-white">RapidAPI setup</h2>
+        <h2 className="text-lg font-bold text-white">api-football.com setup</h2>
         <p className="text-sm text-slate-300">
-          The <strong className="text-white">Test RapidAPI</strong> button calls{' '}
-          <code>sofascore6.p.rapidapi.com</code> for the chosen date. Set the{' '}
-          <code>RAPIDAPI_KEY</code> environment variable (Vercel → Settings → Environment Variables)
-          to your RapidAPI key before deploying.
+          The <strong className="text-white">Test api-football</strong> button calls{' '}
+          <code>v3.football.api-sports.io</code> for the chosen date. Set the{' '}
+          <code>APIFOOTBALLKEY</code> environment variable (Vercel → Settings → Environment Variables)
+          to your api-football.com API key before deploying.
         </p>
       </div>
 
       <ResultPanel title="Vercel result" result={vercelResult} />
       <ResultPanel title="Supabase function result" result={supabaseResult} />
-      <ResultPanel title="RapidAPI result" result={rapidApiResult} />
+      <ResultPanel title="api-football result" result={rapidApiResult} />
     </div>
   );
 }
