@@ -12,6 +12,9 @@ type RoundQuery =
   | { mode: 'custom'; targetDate: string; kickoffTime: string }
   | { mode: 'existing'; weekId: number };
 
+const MANUAL_TRIGGER_ENRICH = true;
+const MANUAL_TRIGGER_ENRICH_ODDS = false;
+
 async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -41,8 +44,6 @@ export default function HomePage() {
   const [customDate, setCustomDate] = useState(getRelevantSaturday(0));
   const [customKickoffTime, setCustomKickoffTime] = useState('19:45');
   const [showCustomRoundMenu, setShowCustomRoundMenu] = useState(false);
-  const [enrichFixtures, setEnrichFixtures] = useState(true);
-  const [enrichOdds, setEnrichOdds] = useState(false);
 
   const fetchData = useCallback(async (query: RoundQuery) => {
     try {
@@ -195,23 +196,23 @@ export default function HomePage() {
           kickoffTime: week.target_kickoff_time,
           isCustom: week.is_custom,
           weekOffset: 0,
-          enrich: enrichFixtures,
-          enrichOdds,
+          enrich: MANUAL_TRIGGER_ENRICH,
+          enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
         };
       } else if (query.mode === 'custom') {
         triggerPayload = {
           targetDate: query.targetDate,
           kickoffTime: query.kickoffTime,
           isCustom: true,
-          enrich: enrichFixtures,
-          enrichOdds,
+          enrich: MANUAL_TRIGGER_ENRICH,
+          enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
         };
       } else {
         triggerPayload = {
           weekOffset: Math.max(0, query.mode === 'standard' ? query.weekOffset : 0),
           isCustom: false,
-          enrich: enrichFixtures,
-          enrichOdds,
+          enrich: MANUAL_TRIGGER_ENRICH,
+          enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
         };
       }
 
@@ -277,7 +278,7 @@ export default function HomePage() {
     } finally {
       setRefreshing(false);
     }
-  }, [enrichFixtures, enrichOdds, hydrateRoundFromFixtures, week]);
+  }, [hydrateRoundFromFixtures, week]);
 
   useEffect(() => {
     fetchData(activeQuery);
@@ -286,12 +287,6 @@ export default function HomePage() {
   useEffect(() => {
     loadRounds();
   }, [loadRounds]);
-
-  useEffect(() => {
-    if (!enrichFixtures && enrichOdds) {
-      setEnrichOdds(false);
-    }
-  }, [enrichFixtures, enrichOdds]);
 
   const currentRoundIndex = week ? rounds.findIndex((round) => round.id === week.id) : -1;
 
@@ -466,27 +461,6 @@ export default function HomePage() {
           <p className="text-emerald-400 text-xs">
             {fixtures.length} fixture{fixtures.length !== 1 ? 's' : ''} • Over 2.5 goals to win 💰
           </p>
-          <div className="flex flex-wrap gap-3 pt-1 text-xs text-slate-300">
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={enrichFixtures}
-                onChange={(event) => setEnrichFixtures(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500"
-              />
-              Enrich
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={enrichOdds}
-                onChange={(event) => setEnrichOdds(event.target.checked)}
-                disabled={!enrichFixtures}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500 disabled:opacity-40"
-              />
-              Odds
-            </label>
-          </div>
           <div className="pt-1">
             <button
               onClick={() => setShowCustomRoundMenu((prev) => !prev)}
