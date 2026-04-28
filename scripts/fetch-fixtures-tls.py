@@ -747,6 +747,81 @@ class SupabaseRest:
             }
         )
 
+    def find_week(
+        self,
+        season: str,
+        week_number: int,
+        is_custom: bool,
+    ) -> Dict[str, Any] | None:
+        url = f"{self.base_url}/rest/v1/weeks"
+        params = {
+            "season": f"eq.{season}",
+            "week_number": f"eq.{week_number}",
+            "is_custom": f"eq.{str(is_custom).lower()}",
+            "select": "*",
+            "limit": "1",
+        }
+        res = self.session.get(url, params=params, timeout=30)
+        if res.status_code >= 300:
+            return None
+        data = res.json()
+        return data[0] if data else None
+
+    def get_week_fixture_enrichment_status(self, week_id: int) -> Dict[str, Any]:
+        url = f"{self.base_url}/rest/v1/fixtures"
+        params = {
+            "week_id": f"eq.{week_id}",
+            "select": "id,insights_updated_at,home_form,away_form,home_team_position,away_team_position,odds_over_25,odds_under_25",
+        }
+        res = self.session.get(url, params=params, timeout=45)
+        if res.status_code >= 300:
+            raise RuntimeError(f"Failed to inspect existing fixtures: {res.status_code} {res.text[:300]}")
+        fixtures = res.json()
+        fixture_count = len(fixtures)
+        enriched_count = 0
+        odds_count = 0
+
+        for fixture in fixtures:
+            has_form = fixture.get("home_form") is not None and fixture.get("away_form") is not None
+            has_insights = fixture.get("insights_updated_at") is not None
+            if has_insights and has_form:
+                enriched_count += 1
+
+            if fixture.get("odds_over_25") is not None or fixture.get("odds_under_25") is not None:
+                odds_count += 1
+
+        return {
+            "fixture_count": fixture_count,
+            "enriched_count": enriched_count,
+            "odds_count": odds_count,
+        }
+
+    def should_skip_existing_round(
+        self,
+        season: str,
+        week_number: int,
+        is_custom: bool,
+        require_enrichment: bool,
+        require_odds: bool,
+    ) -> tuple[bool, Dict[str, Any] | None, Dict[str, Any]]:
+        week = self.find_week(season, week_number, is_custom)
+        if not week:
+            return False, None, {"reason": "week_not_found"}
+
+        status = self.get_week_fixture_enrichment_status(int(week["id"]))
+        fixture_count = int(status["fixture_count"])
+        if fixture_count == 0:
+            return False, week, {**status, "reason": "no_fixtures"}
+
+        enrichment_ok = (not require_enrichment) or int(status["enriched_count"]) >= fixture_count
+        odds_ok = (not require_odds) or int(status["odds_count"]) >= fixture_count
+
+        return enrichment_ok and odds_ok, week, {
+            **status,
+            "enrichment_ok": enrichment_ok,
+            "odds_ok": odds_ok,
+        }
+
     def upsert_week(
         self,
         saturday_date: str,
@@ -842,6 +917,27 @@ def main() -> int:
         f"enrichOdds={enrich_odds}, requestBudget={request_budget if use_rapidapi() else 'unlimited'}"
     )
 
+    supabase = SupabaseRest(supabase_url, service_role)
+    skip, existing_week, existing_status = supabase.should_skip_existing_round(
+        season=season,
+        week_number=week_number,
+        is_custom=is_custom,
+        require_enrichment=enrich,
+        require_odds=enrich_odds,
+    )
+    if skip:
+        print(
+            f"Skipping fixture fetch for week {existing_week['week_number']}"
+            f"{'.5' if existing_week.get('is_custom') else ''}: existing fixtures already satisfy "
+            f"requested enrichment. Status: {existing_status}"
+        )
+        supabase.update_week_request_usage(
+            week_id=int(existing_week["id"]),
+            request_budget=request_budget if use_rapidapi() else None,
+            requests_used=0,
+        )
+        return 0
+
     tls_session_factory = get_tls_session()
     with tls_session_factory as tls_session:
         sofa_payload = fetch_scheduled_events(tls_session, target_date)
@@ -860,7 +956,6 @@ def main() -> int:
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
     print(f"Calculated star picks: {len(star_rows)} / {len(fixture_rows)} fixtures")
 
-    supabase = SupabaseRest(supabase_url, service_role)
     week = supabase.upsert_week(
         saturday_date=saturday_date,
         season=season,
