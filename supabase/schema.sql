@@ -18,6 +18,8 @@ CREATE TABLE weeks (
   is_custom       BOOLEAN NOT NULL DEFAULT FALSE,
   status          TEXT NOT NULL DEFAULT 'active'
                     CHECK (status IN ('active', 'completed')),
+  rapidapi_request_budget INT,
+  rapidapi_requests_used INT NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (season, week_number, is_custom)
 );

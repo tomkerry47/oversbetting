@@ -57,6 +57,12 @@ SOFASCORE_TOURNAMENTS: Dict[int, str] = {
 }
 
 STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
+RAPIDAPI_REQUEST_LIMIT: int | None = None
+RAPIDAPI_REQUESTS_USED = 0
+
+
+class RapidApiBudgetExhausted(RuntimeError):
+    pass
 
 
 def use_rapidapi() -> bool:
@@ -78,6 +84,26 @@ def enrich_odds_enabled() -> bool:
     return truthy_env("ENRICH_ODDS", False)
 
 
+def request_budget_default() -> int:
+    value = os.getenv("ROUND_REQUEST_BUDGET", "100")
+    try:
+        return max(1, int(value))
+    except ValueError:
+        return 100
+
+
+def configure_rapidapi_budget(limit: int | None) -> None:
+    global RAPIDAPI_REQUEST_LIMIT, RAPIDAPI_REQUESTS_USED
+    RAPIDAPI_REQUEST_LIMIT = limit
+    RAPIDAPI_REQUESTS_USED = 0
+
+
+def rapidapi_budget_remaining() -> int | None:
+    if RAPIDAPI_REQUEST_LIMIT is None:
+        return None
+    return max(0, RAPIDAPI_REQUEST_LIMIT - RAPIDAPI_REQUESTS_USED)
+
+
 def rapidapi_get(endpoint: str, retries: int = DEFAULT_RETRIES) -> Dict[str, Any]:
     api_key = os.getenv("RAPIDAPI_KEY")
     if not api_key:
@@ -91,6 +117,12 @@ def rapidapi_get(endpoint: str, retries: int = DEFAULT_RETRIES) -> Dict[str, Any
     last_error: Exception | None = None
 
     for attempt in range(retries):
+        global RAPIDAPI_REQUESTS_USED
+        if RAPIDAPI_REQUEST_LIMIT is not None and RAPIDAPI_REQUESTS_USED >= RAPIDAPI_REQUEST_LIMIT:
+            raise RapidApiBudgetExhausted(
+                f"RapidAPI request budget exhausted ({RAPIDAPI_REQUESTS_USED}/{RAPIDAPI_REQUEST_LIMIT})"
+            )
+        RAPIDAPI_REQUESTS_USED += 1
         response = requests.get(url, headers=headers, timeout=45)
         if response.status_code == 200:
             return response.json()
@@ -149,6 +181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--isCustom", type=str, help="Explicit custom-round flag: true or false")
     parser.add_argument("--enrich", type=str, help="Enrich form/positions/star picks: true or false")
     parser.add_argument("--enrichOdds", type=str, help="Fetch per-match odds during enrichment: true or false")
+    parser.add_argument("--requestBudget", type=int, help="Max RapidAPI requests to spend for this round")
     return parser.parse_args()
 
 
@@ -201,7 +234,7 @@ def parse_bool(value: str | None, default: bool) -> bool:
         return True
     if normalized in {"false", "0", "no"}:
         return False
-    raise ValueError("--isCustom must be true or false")
+    raise ValueError("Boolean flags must be true or false")
 
 
 def get_saturday_for_target_date(target_date: str) -> str:
@@ -313,6 +346,8 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "1
                 "home_score": event.get("homeScore", {}).get("current"),
                 "away_score": event.get("awayScore", {}).get("current"),
                 "match_status": "FT" if status_type == "finished" else "LIVE" if status_type == "inprogress" else "NS",
+                "_season_id": (event.get("season") or {}).get("id"),
+                "_start_timestamp": start_timestamp,
             }
         )
 
@@ -358,6 +393,35 @@ def fetch_table_positions(
     except Exception:
         STANDINGS_CACHE[cache_key] = {}
         return {}
+
+
+def fetch_league_recent_events(
+    league_id: int,
+    season_id: int | None,
+    max_pages: int = 2,
+) -> List[Dict[str, Any]]:
+    if not use_rapidapi() or not season_id:
+        return []
+
+    events: List[Dict[str, Any]] = []
+    for page_index in range(max_pages):
+        try:
+            payload = rapidapi_get(
+                f"/tournaments/get-last-matches?tournamentId={league_id}&seasonId={season_id}&pageIndex={page_index}"
+            )
+        except RapidApiBudgetExhausted:
+            raise
+        except Exception as exc:
+            print(f"Failed to fetch league form for {league_id}/{season_id}: {exc}", file=sys.stderr)
+            break
+
+        page_events = payload.get("events") or []
+        if isinstance(page_events, list):
+            events.extend(page_events)
+        if not payload.get("hasNextPage") or not page_events:
+            break
+
+    return events
 
 
 def build_form(
@@ -582,6 +646,95 @@ def enrich_fixture_row(session: Any, row: Dict[str, Any], include_odds: bool) ->
     row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
 
 
+def apply_bulk_enrichment(session: Any, rows: List[Dict[str, Any]], include_odds: bool) -> None:
+    for row in rows:
+        set_default_insights(row)
+
+    grouped: Dict[tuple[int, int | None], List[Dict[str, Any]]] = {}
+    for row in rows:
+        league_id = row.get("league_id")
+        if not isinstance(league_id, int):
+            continue
+        grouped.setdefault((league_id, row.get("_season_id")), []).append(row)
+
+    for (league_id, season_id), league_rows in grouped.items():
+        try:
+            positions_by_team = fetch_table_positions(session, league_id, season_id)
+        except RapidApiBudgetExhausted:
+            print("Request budget exhausted while fetching standings; skipping remaining form/position enrichment.", file=sys.stderr)
+            break
+
+        try:
+            league_events = fetch_league_recent_events(league_id, season_id)
+        except RapidApiBudgetExhausted:
+            print("Request budget exhausted while fetching league form; using standings collected so far.", file=sys.stderr)
+            league_events = []
+
+        for row in league_rows:
+            home_team_id = row.get("home_team_id")
+            away_team_id = row.get("away_team_id")
+            fixture_ts = row.get("_start_timestamp") or int(dt.datetime.now(dt.timezone.utc).timestamp())
+
+            if isinstance(home_team_id, int):
+                row["home_team_position"] = positions_by_team.get(home_team_id)
+                row["home_form"] = build_form(
+                    league_events,
+                    home_team_id,
+                    league_id,
+                    int(fixture_ts),
+                    positions_by_team,
+                )
+            if isinstance(away_team_id, int):
+                row["away_team_position"] = positions_by_team.get(away_team_id)
+                row["away_form"] = build_form(
+                    league_events,
+                    away_team_id,
+                    league_id,
+                    int(fixture_ts),
+                    positions_by_team,
+                )
+            row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+
+    apply_star_rankings(rows)
+
+    if not include_odds:
+        return
+
+    odds_candidates = sorted(
+        rows,
+        key=lambda row: (
+            row.get("star_score") if isinstance(row.get("star_score"), (int, float)) else -1,
+            row.get("api_fixture_id") or 0,
+        ),
+        reverse=True,
+    )
+    for row in odds_candidates:
+        fixture_id = row.get("api_fixture_id")
+        if not fixture_id:
+            continue
+        try:
+            odds_payload = sofa_get(session, f"/event/{fixture_id}/odds/1/all")
+            over, under = extract_over_under_odds(odds_payload)
+            row["odds_over_25"] = over
+            row["odds_under_25"] = under
+        except RapidApiBudgetExhausted:
+            print("Request budget exhausted while fetching odds; remaining fixtures keep odds empty.", file=sys.stderr)
+            break
+        except Exception as exc:
+            if " 404 " in str(exc) or "error 404" in str(exc).lower():
+                row["odds_over_25"] = None
+                row["odds_under_25"] = None
+            else:
+                print(f"Failed to fetch odds for fixture {fixture_id}: {exc}", file=sys.stderr)
+        row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+
+    apply_star_rankings(rows)
+
+
+def strip_internal_fields(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in row.items() if not key.startswith("_")}
+
+
 class SupabaseRest:
     def __init__(self, base_url: str, service_role_key: str) -> None:
         self.base_url = base_url.rstrip("/")
@@ -644,6 +797,22 @@ class SupabaseRest:
         if res.status_code >= 300:
             raise RuntimeError(f"Failed to upsert fixtures: {res.status_code} {res.text[:300]}")
 
+    def update_week_request_usage(self, week_id: int, request_budget: int | None, requests_used: int) -> None:
+        payload = {
+            "rapidapi_request_budget": request_budget,
+            "rapidapi_requests_used": requests_used,
+        }
+        url = f"{self.base_url}/rest/v1/weeks"
+        res = self.session.patch(url, params={"id": f"eq.{week_id}"}, data=json.dumps(payload), timeout=30)
+        if res.status_code >= 300:
+            if "rapidapi_request_budget" in res.text or "rapidapi_requests_used" in res.text:
+                print(
+                    "Could not store RapidAPI request usage. Run supabase/migrations/add_week_request_usage.sql.",
+                    file=sys.stderr,
+                )
+                return
+            raise RuntimeError(f"Failed to update week request usage: {res.status_code} {res.text[:300]}")
+
 
 def main() -> int:
     args = parse_args()
@@ -659,6 +828,8 @@ def main() -> int:
     is_custom = parse_bool(args.isCustom, bool(args.targetDate and args.kickoffTime))
     enrich = parse_bool(args.enrich, enrich_fixtures_enabled())
     enrich_odds = parse_bool(args.enrichOdds, enrich_odds_enabled())
+    request_budget = max(1, args.requestBudget) if args.requestBudget else request_budget_default()
+    configure_rapidapi_budget(request_budget if use_rapidapi() else None)
     target_date = args.targetDate or get_relevant_saturday(week_offset)
     target_kickoff_time = normalize_kickoff_time(args.kickoffTime or "15:00:00")
     saturday_date = get_saturday_for_target_date(target_date) if is_custom else get_relevant_saturday(week_offset)
@@ -668,7 +839,7 @@ def main() -> int:
         f"Fetching fixtures for target_date={target_date}, kickoff={target_kickoff_time}, "
         f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}, "
         f"source={'RapidAPI' if use_rapidapi() else 'SofaScore direct'}, enrich={enrich}, "
-        f"enrichOdds={enrich_odds}"
+        f"enrichOdds={enrich_odds}, requestBudget={request_budget if use_rapidapi() else 'unlimited'}"
     )
 
     tls_session_factory = get_tls_session()
@@ -681,22 +852,11 @@ def main() -> int:
             return 0
 
         if enrich:
-            # Enrich each fixture with cached form/position data for instant UI dropdown details.
-            for i, row in enumerate(fixture_rows):
-                fixture_id = row.get("api_fixture_id")
-                try:
-                    enrich_fixture_row(tls_session, row, enrich_odds)
-                    print(f"Enriched fixture {fixture_id} ({i + 1}/{len(fixture_rows)})")
-                except Exception as exc:
-                    print(f"Failed to enrich fixture {fixture_id}: {exc}", file=sys.stderr)
-                    set_default_insights(row)
-                time.sleep(0.4)
+            apply_bulk_enrichment(tls_session, fixture_rows, enrich_odds)
         else:
             for row in fixture_rows:
                 set_default_insights(row)
 
-    if enrich:
-        apply_star_rankings(fixture_rows)
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
     print(f"Calculated star picks: {len(star_rows)} / {len(fixture_rows)} fixtures")
 
@@ -713,10 +873,17 @@ def main() -> int:
     for row in fixture_rows:
         row["week_id"] = week["id"]
 
+    fixture_rows = [strip_internal_fields(row) for row in fixture_rows]
     supabase.upsert_fixtures(fixture_rows)
+    supabase.update_week_request_usage(
+        week_id=week["id"],
+        request_budget=request_budget if use_rapidapi() else None,
+        requests_used=RAPIDAPI_REQUESTS_USED if use_rapidapi() else 0,
+    )
     print(
         f"Stored/updated {len(fixture_rows)} fixtures (with insights) for "
-        f"week {week['week_number']}{'.5' if week.get('is_custom') else ''}"
+        f"week {week['week_number']}{'.5' if week.get('is_custom') else ''}. "
+        f"RapidAPI requests used: {RAPIDAPI_REQUESTS_USED}/{request_budget if use_rapidapi() else 'unlimited'}"
     )
     return 0
 

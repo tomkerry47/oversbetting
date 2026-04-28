@@ -51,4 +51,5 @@ jobs:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           USE_RAPIDAPI: "true"
           ENRICH_FIXTURES: "true"
-          ENRICH_ODDS: "false"
+          ENRICH_ODDS: "true"
+          ROUND_REQUEST_BUDGET: "100"

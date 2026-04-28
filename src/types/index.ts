@@ -36,6 +36,8 @@ export interface Week {
   target_kickoff_time: string;
   is_custom: boolean;
   status: 'active' | 'completed';
+  rapidapi_request_budget: number | null;
+  rapidapi_requests_used: number;
   created_at: string;
 }
 

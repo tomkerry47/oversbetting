@@ -18,6 +18,7 @@ RAPIDAPI_KEY=your-rapidapi-key
 USE_RAPIDAPI=true
 ENRICH_FIXTURES=true
 ENRICH_ODDS=false
+ROUND_REQUEST_BUDGET=100
 ```
 
 ## Codex MCP Config
@@ -248,6 +249,7 @@ RAPIDAPI_KEY="$RAPIDAPI_KEY" \
 USE_RAPIDAPI=true \
 ENRICH_FIXTURES=true \
 ENRICH_ODDS=false \
+ROUND_REQUEST_BUDGET=100 \
 node scripts/fetch-fixtures-to-supabase.mjs --weekOffset=1
 ```
 
@@ -258,7 +260,14 @@ SUPABASE_URL="$SUPABASE_URL" \
 SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
 RAPIDAPI_KEY="$RAPIDAPI_KEY" \
 USE_RAPIDAPI=true \
-python3 scripts/fetch-fixtures-tls.py --weekOffset=1 --enrich=true --enrichOdds=false
+python3 scripts/fetch-fixtures-tls.py --weekOffset=1 --enrich=true --enrichOdds=false --requestBudget=100
+```
+
+Apply the request-usage columns:
+
+```bash
+supabase db push
+# or run supabase/migrations/add_week_request_usage.sql in the Supabase SQL editor
 ```
 
 ## Lowest-Call Fixture Enrichment
@@ -291,4 +300,6 @@ up to 16 team-form calls for 8 selected fixtures, cached by teamId
 + up to 8 odds/detail calls only if the UI displays those fields
 ```
 
-This keeps the weekly fixture import cheap and predictable, while still allowing richer selected-fixture views.
+Scheduled Friday refresh runs enrichment and odds under a 100-request round budget.
+Manual refreshes should only run when a round has no fixtures yet, preserving the
+weekly request allocation.

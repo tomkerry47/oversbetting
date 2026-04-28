@@ -25,6 +25,10 @@ on:
         description: "Fetch per-match odds during enrichment"
         required: false
         default: "false"
+      request_budget:
+        description: "Max RapidAPI requests to spend for this round"
+        required: false
+        default: "100"
 
 jobs:
   sync-fixtures:
@@ -56,6 +60,7 @@ jobs:
           ARGS="$ARGS --isCustom=${{ github.event.inputs.is_custom }}"
           ARGS="$ARGS --enrich=${{ github.event.inputs.enrich }}"
           ARGS="$ARGS --enrichOdds=${{ github.event.inputs.enrich_odds }}"
+          ARGS="$ARGS --requestBudget=${{ github.event.inputs.request_budget }}"
           echo "Running: python scripts/fetch-fixtures-tls.py $ARGS"
           python scripts/fetch-fixtures-tls.py $ARGS
         env:
@@ -65,3 +70,4 @@ jobs:
           USE_RAPIDAPI: "true"
           ENRICH_FIXTURES: "true"
           ENRICH_ODDS: "false"
+          ROUND_REQUEST_BUDGET: "100"

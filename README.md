@@ -18,6 +18,7 @@ RAPIDAPI_KEY=your-rapidapi-key
 USE_RAPIDAPI=true
 ENRICH_FIXTURES=true
 ENRICH_ODDS=false
+ROUND_REQUEST_BUDGET=100
 ```
 
 ### 3. Install & Run
@@ -31,6 +32,7 @@ npm run dev
 - Connect repo to Vercel
 - Add the same environment variables in Vercel dashboard
 - Add `RAPIDAPI_KEY` to GitHub Actions secrets for the scheduled/manual fixture and results workflows
+- Run `supabase/migrations/add_week_request_usage.sql` to store per-round RapidAPI request budget/usage
 - Deploy!
 
 ## SofaScore / RapidAPI Notes

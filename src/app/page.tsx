@@ -228,6 +228,12 @@ export default function HomePage() {
         return false;
       }
 
+      if (triggerData.skipped) {
+        setLoadingMessage(triggerData.message || 'Fixtures already exist for this round. Refresh skipped.');
+        setTimeout(() => setLoadingMessage(''), 5000);
+        return true;
+      }
+
       const runId = triggerData.runId;
       if (!runId) {
         setLoadingMessage('Fixture sync started. Check back shortly for updates.');
@@ -370,6 +376,11 @@ export default function HomePage() {
   };
 
   const handleRefreshFixtures = async () => {
+    if (fixtures.length > 0) {
+      setLoadingMessage('Fixtures already exist for this round. Refresh skipped to preserve the weekly request budget.');
+      setTimeout(() => setLoadingMessage(''), 5000);
+      return;
+    }
     await triggerFixtureSync(activeQuery);
   };
 
