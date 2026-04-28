@@ -317,7 +317,7 @@ async function apiRequest(endpoint: string, retries = 3) {
  * `/tournaments/events` endpoint instead of the unofficial SofaScore API.
  */
 export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00'): Promise<APIFixture[]> {
-  const useRapidApi = process.env.USE_RAPIDAPI === 'true' && !!process.env.RAPIDAPI_KEY;
+  const useRapidApi = process.env.USE_RAPIDAPI !== 'false' && !!process.env.RAPIDAPI_KEY;
 
   if (useRapidApi) {
     try {

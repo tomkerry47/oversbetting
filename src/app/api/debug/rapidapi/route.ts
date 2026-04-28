@@ -6,10 +6,10 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get('date') || undefined;
-  const leagueIdParam = searchParams.get('leagueId') ?? searchParams.get('tournamentId');
-  const leagueId = leagueIdParam ? parseInt(leagueIdParam, 10) : undefined;
-  const result = await fetchRapidApiDebugFixtures(date, leagueId);
+  const categoryIdParam = searchParams.get('categoryId');
+  const parsed = categoryIdParam !== null ? parseInt(categoryIdParam, 10) : NaN;
+  const categoryId = !Number.isNaN(parsed) && parsed > 0 ? parsed : undefined;
+  const result = await fetchRapidApiDebugFixtures(categoryId);
 
   return NextResponse.json(result, {
     status: result.ok ? 200 : 502,
