@@ -18,7 +18,10 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
   return {
     ...week,
     goals_scored: recordedSelections.reduce(
-      (total, selection) => total + Number(selection.total_goals),
+      // Each over-2.5 pick needs three goals. Extra goals do not increase the
+      // weekly progress beyond that pick's three-goal contribution.
+      (total, selection) =>
+        total + Math.min(Number(selection.total_goals), GOAL_THRESHOLD + 1),
       0
     ),
     goals_target: weekSelections.length * (GOAL_THRESHOLD + 1),
