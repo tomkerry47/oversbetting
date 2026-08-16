@@ -4,7 +4,9 @@ import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/w
 import { getActiveRoundWindow } from '@/lib/utils';
 
 async function getVisibleHistoryWeeks() {
-  const { startDate, endDate } = getActiveRoundWindow(6);
+  // Keep the previous round visible while it is still active so results can be
+  // checked from History after its target date has passed.
+  const { startDate, endDate } = getActiveRoundWindow(6, 7);
   try {
     const [activeResponse, completedResponse] = await Promise.all([
       supabase

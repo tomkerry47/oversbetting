@@ -109,10 +109,13 @@ export function canCheckResultsForWeek(week: Pick<Week, 'target_date' | 'target_
   return new Date() >= getRoundResultsAvailableAt(week.target_date, week.target_kickoff_time);
 }
 
-export function getActiveRoundWindow(daysAhead: number = 6): { startDate: string; endDate: string } {
+export function getActiveRoundWindow(
+  daysAhead: number = 6,
+  daysBehind: number = 0
+): { startDate: string; endDate: string } {
   const nowUk = getUKNow();
   return {
-    startDate: format(nowUk, 'yyyy-MM-dd'),
+    startDate: format(addDays(nowUk, -daysBehind), 'yyyy-MM-dd'),
     endDate: format(addDays(nowUk, daysAhead), 'yyyy-MM-dd'),
   };
 }
