@@ -4,8 +4,14 @@ import { useState, useEffect } from 'react';
 import { Week, Selection, Fine, PLAYERS } from '@/types';
 import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
+type HistoryWeek = Week & {
+  goals_scored: number;
+  goals_target: number;
+  goals_recorded: number;
+};
+
 export default function HistoryPage() {
-  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [weeks, setWeeks] = useState<HistoryWeek[]>([]);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
   const [weekData, setWeekData] = useState<
     Record<number, { selections: Selection[]; fines: Fine[] }>
@@ -173,6 +179,21 @@ export default function HistoryPage() {
                         )}
                         {week.status === 'completed' && (
                           <span className="text-xs text-blue-400 ml-2">✓ Completed</span>
+                        )}
+                        {week.goals_target > 0 && (
+                          <span
+                            className={`text-xs ml-2 ${
+                              week.goals_recorded === 0
+                                ? 'text-slate-400'
+                                : week.goals_scored >= week.goals_target
+                                  ? 'text-emerald-400'
+                                  : 'text-amber-400'
+                            }`}
+                          >
+                            ⚽ {week.goals_recorded === 0
+                              ? 'Goals pending'
+                              : `${week.goals_scored}/${week.goals_target} goals`}
+                          </span>
                         )}
                       </h3>
                       <p className="text-slate-400 text-xs">

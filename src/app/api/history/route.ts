@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
 import { getActiveRoundWindow } from '@/lib/utils';
+import { GOAL_THRESHOLD, Week } from '@/types';
+
+type SelectionGoal = {
+  week_id: number;
+  total_goals: number | null;
+};
+
+function addGoalSummary(week: Week, selections: SelectionGoal[]) {
+  const weekSelections = selections.filter((selection) => selection.week_id === week.id);
+  const recordedSelections = weekSelections.filter(
+    (selection) => selection.total_goals !== null && selection.total_goals !== undefined
+  );
+
+  return {
+    ...week,
+    goals_scored: recordedSelections.reduce(
+      (total, selection) => total + Number(selection.total_goals),
+      0
+    ),
+    goals_target: weekSelections.length * (GOAL_THRESHOLD + 1),
+    goals_recorded: recordedSelections.length,
+  };
+}
+
+async function addGoalSummaries(weeks: Week[]) {
+  if (weeks.length === 0) return [];
+
+  const { data: selections, error } = await supabase
+    .from('selections')
+    .select('week_id,total_goals')
+    .in('week_id', weeks.map((week) => week.id));
+
+  if (error) throw error;
+
+  return weeks.map((week) => addGoalSummary(week, selections || []));
+}
 
 async function getVisibleHistoryWeeks() {
   // Keep the previous round visible while it is still active so results can be
@@ -28,10 +64,10 @@ async function getVisibleHistoryWeeks() {
     if (activeResponse.error) throw activeResponse.error;
     if (completedResponse.error) throw completedResponse.error;
 
-    return normalizeWeeks([
+    return addGoalSummaries(normalizeWeeks([
       ...(activeResponse.data || []),
       ...(completedResponse.data || []),
-    ]);
+    ]));
   } catch (error) {
     if (!isMissingWeekColumnError(error)) {
       throw error;
@@ -55,10 +91,10 @@ async function getVisibleHistoryWeeks() {
     if (activeFallback.error) throw activeFallback.error;
     if (completedFallback.error) throw completedFallback.error;
 
-    return normalizeWeeks([
+    return addGoalSummaries(normalizeWeeks([
       ...(activeFallback.data || []),
       ...(completedFallback.data || []),
-    ]);
+    ]));
   }
 }
 
@@ -89,7 +125,14 @@ export async function GET(request: NextRequest) {
         .select('*')
         .eq('week_id', parseInt(weekId));
 
-      return NextResponse.json({ week: normalizeWeek(week), selections, fines });
+      const normalizedWeek = normalizeWeek(week);
+      return NextResponse.json({
+        week: normalizedWeek
+          ? addGoalSummary(normalizedWeek, selections || [])
+          : null,
+        selections,
+        fines,
+      });
     }
 
     const weeks = await getVisibleHistoryWeeks();
