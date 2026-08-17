@@ -68,20 +68,19 @@ function PlayerRow({ player, events }: { player: any; events: any[] }) {
 }
 
 function TeamLineup({ team, events }: { team: any; events: any[] }) {
-  const substitutes = [...(team.substitutes || [])].sort((a: any, b: any) => {
-    const used = (player: any) => events.some((event) => event.type === 'substitution' && matchesPlayer(player, event.player, event.playerId));
-    return Number(used(b)) - Number(used(a));
-  });
+  const substitutes = (team.substitutes || []).filter((player: any) =>
+    events.some((event) => event.type === 'substitution' && matchesPlayer(player, event.player, event.playerId))
+  );
   return <div className="min-w-0">
     <div className="mb-2 flex items-center justify-between gap-2">
       <h3 className="truncate text-xs font-bold text-white">{team.team_name}</h3>
       {team.formation && <span className="shrink-0 rounded bg-slate-700 px-1.5 py-0.5 text-[9px] text-slate-300">{team.formation}</span>}
     </div>
     <div className="space-y-1.5">{(team.players || []).map((player: any) => <PlayerRow key={player.id} player={player} events={events} />)}</div>
-    {substitutes.length > 0 && <details open className="mt-3">
-      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Substitutes ({substitutes.length})</summary>
+    {substitutes.length > 0 && <div className="mt-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">Used substitutes ({substitutes.length})</div>
       <div className="mt-2 space-y-1.5">{substitutes.map((player: any) => <PlayerRow key={player.id} player={player} events={events} />)}</div>
-    </details>}
+    </div>}
   </div>;
 }
 
