@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       typeof isCustom === 'boolean' ? String(isCustom) : hasExplicitTarget ? 'true' : 'false';
     const workflowEnrich = typeof enrich === 'boolean' ? String(enrich) : 'false';
     const workflowEnrichOdds = typeof enrichOdds === 'boolean' ? String(enrichOdds) : 'false';
-    const workflowRequestBudget = '10';
+    const workflowRequestBudget = '20';
 
     // Always dispatch an explicit refresh. The hybrid job upserts by provider
     // ID, so rerunning safely refreshes BSD predictions/odds without creating

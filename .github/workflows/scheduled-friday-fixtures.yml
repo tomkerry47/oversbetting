@@ -53,4 +53,4 @@ jobs:
           USE_RAPIDAPI: "true"
           ENRICH_FIXTURES: "false"
           ENRICH_ODDS: "false"
-          ROUND_REQUEST_BUDGET: "10"
+          ROUND_REQUEST_BUDGET: "20"

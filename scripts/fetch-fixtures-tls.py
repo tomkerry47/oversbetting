@@ -1195,8 +1195,15 @@ def main() -> int:
         # The catalogue is checked on every run. As BSD adds a tracked league,
         # its SofaScore fixtures disappear from this fallback automatically.
         sofa_rows = [row for row in sofa_rows if row["league_name"] not in supported_bsd]
-        for row in sofa_rows:
-            set_default_insights(row)
+        if sofa_rows:
+            # Fallback leagues still need their recent form and positions. This
+            # uses league-level calls only; odds and old SofaScore star ranking
+            # are deliberately discarded so BSD remains the sole star source.
+            apply_bulk_enrichment(tls_session, sofa_rows, include_odds=False)
+            for row in sofa_rows:
+                row["is_star_pick"] = False
+                row["star_rank"] = None
+                row["star_score"] = None
         fixture_rows = bsd_rows + sofa_rows
         print(f"Found {len(bsd_rows)} BSD + {len(sofa_rows)} SofaScore fallback fixtures")
 

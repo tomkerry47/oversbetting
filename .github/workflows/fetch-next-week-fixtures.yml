@@ -28,7 +28,7 @@ on:
       request_budget:
         description: "Max RapidAPI requests to spend for this round"
         required: false
-        default: "10"
+        default: "20"
 
 jobs:
   sync-fixtures:
@@ -71,4 +71,4 @@ jobs:
           USE_RAPIDAPI: "true"
           ENRICH_FIXTURES: "false"
           ENRICH_ODDS: "false"
-          ROUND_REQUEST_BUDGET: "10"
+          ROUND_REQUEST_BUDGET: "20"
