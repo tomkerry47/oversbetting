@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
+import LiveLineups from '@/components/LiveLineups';
 import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 type Pair = { home: number | null; away: number | null };
@@ -38,6 +39,7 @@ function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; de
           </section>
           <LivePitch detail={detail} streamUrl={`/api/demolive/${match.id}/stream`} onMatchEvent={onMatchEvent} />
           <LiveStats stats={stats} />
+          <LiveLineups endpoint={`/api/demolive/${match.id}/lineups`} />
         </div>
       </div>
     </div>

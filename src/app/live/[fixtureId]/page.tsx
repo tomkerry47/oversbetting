@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
+import LiveLineups from '@/components/LiveLineups';
 import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 export default function MatchCentrePage() {
@@ -41,6 +42,7 @@ export default function MatchCentrePage() {
         </section>
         <LivePitch detail={live} streamUrl={`/api/live/${fixtureId}/stream`} onMatchEvent={handleMatchEvent} />
         <LiveStats stats={live} />
+        <LiveLineups endpoint={`/api/live/${fixtureId}/lineups`} />
       </>}
     </main>
   );
