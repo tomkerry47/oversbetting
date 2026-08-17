@@ -17,7 +17,12 @@ function pointOf(item: any): PitchPoint | null {
   const x = Number(rawX);
   const y = Number(rawY);
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100) return null;
-  return { x: Math.max(2, Math.min(98, x)), y: Math.max(3, Math.min(97, y)), item };
+  // BSD normalizes each team as attacking left-to-right. Rotate away-team
+  // positions onto one shared pitch so possession changes remain continuous.
+  const isAway = teamOf(item) === 'away';
+  const pitchX = isAway ? 100 - x : x;
+  const pitchY = isAway ? 100 - y : y;
+  return { x: Math.max(2, Math.min(98, pitchX)), y: Math.max(3, Math.min(97, pitchY)), item };
 }
 
 function actionText(item: any) {
@@ -73,7 +78,13 @@ export default function LivePitch({ detail, streamUrl }: { detail: any; streamUr
   const latestItem = pitchItems.at(-1);
   const latestPoint = pointOf(latestItem);
   const latestTeam = teamOf(latestItem);
-  const sameTeamRaw = latestTeam ? pitchItems.filter((item: any) => teamOf(item) === latestTeam) : pitchItems;
+  const sameTeamRaw: any[] = [];
+  for (let index = pitchItems.length - 1; index >= 0; index--) {
+    const item = pitchItems[index];
+    const team = teamOf(item);
+    if (latestTeam && team && team !== latestTeam) break;
+    if (!latestTeam || team === latestTeam) sameTeamRaw.unshift(item);
+  }
   const sameTeam = sameTeamRaw.filter((item: any, index: number) => {
     if (index === 0) return true;
     const point = pointOf(item);
