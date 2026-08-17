@@ -35,7 +35,7 @@ export default function MatchCentrePage() {
           <LiveKeyEvents events={live?.keyEvents} />
           <div className="mt-4 flex justify-center gap-6 text-xs text-slate-300"><span>Shots on target {live?.homeShotsOnTarget ?? '–'}–{live?.awayShotsOnTarget ?? '–'}</span><span>{live?.xgEstimated ? 'xG est.' : 'xG'} {live?.homeXg?.toFixed?.(2) ?? '–'}–{live?.awayXg?.toFixed?.(2) ?? '–'}</span></div>
         </section>
-        <LivePitch detail={live} />
+        <LivePitch detail={live} streamUrl={`/api/live/${fixtureId}/stream`} />
         <LiveStats stats={live} />
       </>}
     </main>

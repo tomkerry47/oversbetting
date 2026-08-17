@@ -35,7 +35,7 @@ function MatchModal({ match, detail, onClose }: { match: Match; detail: any; onC
             <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{match.homeTeam}</div><div className="text-4xl font-black text-white">{detail?.homeScore ?? match.homeScore ?? 0}–{detail?.awayScore ?? match.awayScore ?? 0}</div><div className="font-semibold text-white">{match.awayTeam}</div></div>
             <LiveKeyEvents events={detail?.keyEvents} />
           </section>
-          <LivePitch detail={detail} />
+          <LivePitch detail={detail} streamUrl={`/api/demolive/${match.id}/stream`} />
           <LiveStats stats={stats} />
         </div>
       </div>

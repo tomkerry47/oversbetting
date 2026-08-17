@@ -9,6 +9,61 @@ function token() {
   return value;
 }
 
+export function createBsdLiveEventStream(eventId: number) {
+  const encoder = new TextEncoder();
+  let socket: WebSocket | null = null;
+  let keepAlive: NodeJS.Timeout | null = null;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let closed = false;
+      const send = (payload: any) => {
+        if (!closed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      };
+      const finish = () => {
+        if (closed) return;
+        closed = true;
+        if (keepAlive) clearInterval(keepAlive);
+        try { controller.close(); } catch { /* Stream may already be cancelled. */ }
+      };
+      socket = new WebSocket('wss://sports.bzzoiro.com/live/football/', ['token', token()]);
+      socket.on('open', () => {
+        socket?.send(JSON.stringify({ action: 'subscribe', event_id: eventId }));
+        keepAlive = setInterval(() => {
+          if (!closed) controller.enqueue(encoder.encode(': keepalive\n\n'));
+        }, 15_000);
+      });
+      socket.on('message', (raw) => {
+        try {
+          const message = JSON.parse(raw.toString());
+          if (message.type === 'ping') {
+            socket?.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+          if (message.type === 'subscribed') {
+            send({ type: 'snapshot', event: message.event, history: message.history || [], livedata: message.livedata || [] });
+          } else if (['action', 'poem', 'livedata', 'event'].includes(message.type)) {
+            send(message);
+          }
+        } catch { /* Ignore provider frames that are not JSON. */ }
+      });
+      socket.on('error', finish);
+      socket.on('close', finish);
+    },
+    cancel() {
+      if (keepAlive) clearInterval(keepAlive);
+      socket?.close();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+}
+
 export async function bsdRequest(path: string, params?: Record<string, string | number>) {
   const url = new URL(`${BSD_BASE}${path}`);
   Object.entries(params || {}).forEach(([key, value]) => url.searchParams.set(key, String(value)));

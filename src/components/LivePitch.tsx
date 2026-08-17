@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type PitchPoint = { x: number; y: number; item: any };
 
@@ -14,7 +14,10 @@ function pointOf(item: any): PitchPoint | null {
   const rawX = raw?.x ?? raw?.coordinate_x;
   const rawY = raw?.y ?? raw?.coordinate_y;
   if (rawX == null || rawY == null) return null;
-  return { x: Math.max(2, Math.min(98, Number(rawX))), y: Math.max(3, Math.min(97, 100 - Number(rawY))), item };
+  const x = Number(rawX);
+  const y = Number(rawY);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100) return null;
+  return { x: Math.max(2, Math.min(98, x)), y: Math.max(3, Math.min(97, y)), item };
 }
 
 function actionText(item: any) {
@@ -25,13 +28,58 @@ function actionText(item: any) {
   return `${minute != null ? `${minute}′ · ` : ''}${String(action).replaceAll('_', ' ')}${player ? ` · ${player}` : ''}`;
 }
 
-export default function LivePitch({ detail }: { detail: any }) {
-  const pitchItems = useMemo(() =>
-    [...(detail?.actions || []), ...(detail?.shotmap || [])].filter((item: any) => pointOf(item)), [detail]);
+function eventKey(item: any) {
+  const point = pointOf(item);
+  return [item.type, item.evid, item.ts || item.uts, item.action_type || item.action || item.situation, point?.x, point?.y, item.commentary].join('-');
+}
+
+function unique(items: any[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = eventKey(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export default function LivePitch({ detail, streamUrl }: { detail: any; streamUrl?: string }) {
+  const [streamItems, setStreamItems] = useState<any[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!streamUrl) return;
+    setStreamItems([]);
+    const source = new EventSource(streamUrl);
+    source.onopen = () => setConnected(true);
+    source.onerror = () => setConnected(false);
+    source.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'snapshot') {
+          const livedata = Array.isArray(message.livedata) ? message.livedata : message.livedata ? [message.livedata] : [];
+          setStreamItems(unique([...(message.history || []), ...livedata]).slice(-300));
+        } else {
+          setStreamItems((current) => unique([...current, message]).slice(-300));
+        }
+      } catch { /* Ignore malformed live frames and keep the last good position. */ }
+    };
+    return () => source.close();
+  }, [streamUrl]);
+
+  const detailActions = Array.isArray(detail?.actions) ? detail.actions : [];
+  const sourceItems = streamItems.length > 0 ? streamItems : detailActions.length > 0 ? detailActions : (detail?.shotmap || []);
+  const pitchItems = useMemo(() => sourceItems.filter((item: any) => pointOf(item)), [sourceItems]);
   const latestItem = pitchItems.at(-1);
   const latestPoint = pointOf(latestItem);
   const latestTeam = teamOf(latestItem);
-  const sameTeam = latestTeam ? pitchItems.filter((item: any) => teamOf(item) === latestTeam) : pitchItems;
+  const sameTeamRaw = latestTeam ? pitchItems.filter((item: any) => teamOf(item) === latestTeam) : pitchItems;
+  const sameTeam = sameTeamRaw.filter((item: any, index: number) => {
+    if (index === 0) return true;
+    const point = pointOf(item);
+    const previous = pointOf(sameTeamRaw[index - 1]);
+    return point?.x !== previous?.x || point?.y !== previous?.y;
+  });
   const passes = sameTeam.filter((item: any) => String(item.action_type || item.action || item.event || '').toLowerCase().includes('pass'));
   const trail = (passes.length >= 2 ? passes : sameTeam).slice(-3).map(pointOf).filter(Boolean) as PitchPoint[];
   const colour = latestTeam === 'away' ? '#f472b6' : '#fbbf24';
@@ -39,7 +87,7 @@ export default function LivePitch({ detail }: { detail: any }) {
   return <section className="card overflow-hidden">
     <div className="mb-3 flex items-center justify-between gap-2">
       <h2 className="text-sm font-bold text-white">Live pitch</h2>
-      {latestTeam && <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: colour }} />{latestTeam} possession</span>}
+      <span className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider ${connected ? 'text-emerald-300' : 'text-slate-500'}`}><i className={`h-2 w-2 rounded-full ${connected ? 'animate-pulse bg-emerald-400' : 'bg-slate-600'}`} />{connected ? 'Live connection' : 'Connecting'}</span>
     </div>
     <div className="live-pitch relative aspect-[1.55] overflow-hidden rounded-xl border border-emerald-300/50 shadow-inner">
       <div className="absolute inset-[2.5%] border border-white/75" />
@@ -60,12 +108,10 @@ export default function LivePitch({ detail }: { detail: any }) {
       </svg>}
       {latestPoint && <div className="live-ball absolute z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_12px_rgba(255,255,255,.9)]" style={{ left: `${latestPoint.x}%`, top: `${latestPoint.y}%`, backgroundColor: colour }} />}
       {!latestPoint && <div className="absolute inset-0 grid place-items-center bg-emerald-950/20 text-xs font-semibold text-emerald-50">Waiting for positioned actions…</div>}
-      {latestItem && <div className="pointer-events-none absolute inset-x-[18%] top-1/2 z-20 -translate-y-1/2">
-        <div key={actionText(latestItem)} className="live-event-enter rounded-md bg-emerald-950/80 px-3 py-2 text-center shadow-xl backdrop-blur-sm">
-          <div className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: colour }}>Current event</div>
-          <div className="mt-0.5 text-xs font-black uppercase leading-tight text-white sm:text-sm">{actionText(latestItem)}</div>
-        </div>
-      </div>}
+    </div>
+    <div key={actionText(latestItem)} className="live-event-enter mt-3 rounded-lg border-l-4 bg-slate-950/80 px-3 py-2.5 shadow-lg" style={{ borderColor: colour }}>
+      <div className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: colour }}>Current event{latestTeam ? ` · ${latestTeam}` : ''}</div>
+      <div className="mt-0.5 text-sm font-black capitalize text-white">{actionText(latestItem)}</div>
     </div>
   </section>;
 }
