@@ -39,7 +39,7 @@ function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; de
           </section>
           <LivePitch detail={detail} streamUrl={`/api/demolive/${match.id}/stream`} onMatchEvent={onMatchEvent} />
           <LiveStats stats={stats} />
-          <LiveLineups endpoint={`/api/demolive/${match.id}/lineups`} />
+          <LiveLineups endpoint={`/api/demolive/${match.id}/lineups`} events={detail?.keyEvents || []} />
         </div>
       </div>
     </div>

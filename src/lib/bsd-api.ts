@@ -97,6 +97,7 @@ export function parseBsdKeyEvents(incidentsPayload: any) {
   if (!Array.isArray(raw)) return [];
   return raw.map((incident: any, index: number) => {
     const type = String(incident.type || incident.incident_type || incident.event || '').toLowerCase().replaceAll('_', '-');
+    const cardType = String(incident.card_type || incident.card || type).toLowerCase().replaceAll('_', '-');
     const isGoal = type.includes('goal');
     const isCard = type.includes('card') || ['yellow', 'red', 'second-yellow'].includes(type);
     const isSubstitution = type.includes('substitution') || type === 'sub';
@@ -106,12 +107,15 @@ export function parseBsdKeyEvents(incidentsPayload: any) {
     const addedTime = numberAt(incident, [['added_time'], ['injury_time']]);
     return {
       id: incident.id || `${type}-${minute ?? 'na'}-${player || index}`,
-      type: isGoal ? 'goal' : isCard ? (type.includes('red') ? 'red-card' : 'yellow-card') : isSubstitution ? 'substitution' : 'var',
+      type: isGoal ? 'goal' : isCard ? (cardType.includes('red') || cardType.includes('second-yellow') ? 'red-card' : 'yellow-card') : isSubstitution ? 'substitution' : 'var',
       minute,
       addedTime,
       player,
+      playerId: numberAt(incident, [['player_id'], ['player_in_id']]),
       assist: personName(incident.assist),
+      assistId: numberAt(incident, [['assist_id']]),
       playerOut: personName(incident.player_out) || personName(incident.out),
+      playerOutId: numberAt(incident, [['player_out_id']]),
       team: incident.is_home === true ? 'home' : incident.is_home === false ? 'away' : incident.team || incident.side || null,
       homeScore: numberAt(incident, [['home_score'], ['score', 'home']]),
       awayScore: numberAt(incident, [['away_score'], ['score', 'away']]),

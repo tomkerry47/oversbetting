@@ -42,7 +42,7 @@ export default function MatchCentrePage() {
         </section>
         <LivePitch detail={live} streamUrl={`/api/live/${fixtureId}/stream`} onMatchEvent={handleMatchEvent} />
         <LiveStats stats={live} />
-        <LiveLineups endpoint={`/api/live/${fixtureId}/lineups`} />
+        <LiveLineups endpoint={`/api/live/${fixtureId}/lineups`} events={live?.keyEvents || []} />
       </>}
     </main>
   );
