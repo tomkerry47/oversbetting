@@ -13,6 +13,11 @@ function labelIncident(item: any) {
   return `${minute != null ? `${minute}' ` : ''}${text || [String(type).replaceAll('_', ' '), player, team].filter(Boolean).join(' · ')}`;
 }
 
+function eventMinute(event: any) {
+  if (event.minute == null) return '–';
+  return `${event.minute}${event.addedTime ? `+${event.addedTime}` : ''}′`;
+}
+
 function actionTeam(item: any) {
   return item.team || item.side || (item.home === true ? 'home' : item.home === false ? 'away' : null);
 }
@@ -69,6 +74,14 @@ export default function MatchCentrePage() {
           </svg>}
           {!latestAction && <div className="absolute inset-0 grid place-items-center text-xs text-emerald-100">Pitch actions appear when the match is live</div>}
         </div></section>
+        {live?.keyEvents?.length > 0 && <section className="card">
+          <h2 className="mb-3 text-sm font-bold text-white">Key events</h2>
+          <div className="space-y-2">{live.keyEvents.map((event: any) => <div key={event.id} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-lg bg-slate-800/60 px-3 py-2 text-sm">
+            <span className="font-bold text-emerald-400">{eventMinute(event)}</span>
+            <span className="text-slate-200">{event.type === 'goal' ? '⚽' : event.type === 'red-card' ? '🟥' : event.type === 'yellow-card' ? '🟨' : event.type === 'substitution' ? '🔁' : 'VAR'} {event.player || 'Match update'}{event.assist ? <span className="text-xs text-slate-400"> · assist {event.assist}</span> : null}</span>
+            {event.homeScore != null && event.awayScore != null && <span className="font-bold text-white">{event.homeScore}–{event.awayScore}</span>}
+          </div>)}</div>
+        </section>}
         <section className="card"><h2 className="text-sm font-bold text-white mb-3">Commentary</h2><div className="space-y-2 max-h-80 overflow-y-auto">{[...(live?.incidents || []), ...pitchActions].slice(-80).reverse().map((item: any, index: number) => <div key={item.id || index} className="border-l-2 border-emerald-500 pl-3 py-1 text-sm text-slate-200">{labelIncident(item)}</div>)}{!live?.incidents?.length && !pitchActions.length && <div className="text-sm text-slate-500">No match commentary yet.</div>}</div></section>
       </>}
     </main>

@@ -26,6 +26,11 @@ function actionLabel(item: any) {
   return `${minute != null ? `${minute}' ` : ''}${String(action).replaceAll('_', ' ')}${player ? ` · ${player}` : ''}`;
 }
 
+function eventMinute(event: any) {
+  if (event.minute == null) return '–';
+  return `${event.minute}${event.addedTime ? `+${event.addedTime}` : ''}′`;
+}
+
 function itemTeam(item: any): string | null {
   return item.team || item.side || (item.home === true ? 'home' : item.home === false ? 'away' : null);
 }
@@ -113,6 +118,14 @@ function MatchModal({ match, detail, onClose }: { match: Match; detail: any; onC
             <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{match.homeTeam}</div><div className="text-4xl font-black text-white">{detail?.homeScore ?? match.homeScore ?? 0}–{detail?.awayScore ?? match.awayScore ?? 0}</div><div className="font-semibold text-white">{match.awayTeam}</div></div>
           </section>
           <LivePitch detail={detail} />
+          {detail?.keyEvents?.length > 0 && <div className="card">
+            <h2 className="mb-3 text-sm font-bold text-white">Key events</h2>
+            <div className="space-y-2">{detail.keyEvents.map((event: any) => <div key={event.id} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-lg bg-slate-800/60 px-3 py-2 text-sm">
+              <span className="font-bold text-emerald-400">{eventMinute(event)}</span>
+              <span className="text-slate-200">{event.type === 'goal' ? '⚽' : event.type === 'red-card' ? '🟥' : event.type === 'yellow-card' ? '🟨' : event.type === 'substitution' ? '🔁' : 'VAR'} {event.player || 'Match update'}{event.assist ? <span className="text-xs text-slate-400"> · assist {event.assist}</span> : null}</span>
+              {event.homeScore != null && event.awayScore != null && <span className="font-bold text-white">{event.homeScore}–{event.awayScore}</span>}
+            </div>)}</div>
+          </div>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="card">
               <h2 className="mb-3 text-sm font-bold text-white">Match statistics</h2>
@@ -206,4 +219,3 @@ export default function DemoLivePage() {
     </main>
   );
 }
-

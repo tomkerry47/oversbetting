@@ -32,6 +32,40 @@ export function numberAt(object: any, paths: string[][]): number | null {
   return null;
 }
 
+function personName(value: any): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return value?.name || value?.short_name || value?.display_name || null;
+}
+
+export function parseBsdKeyEvents(incidentsPayload: any) {
+  const raw = incidentsPayload?.incidents || incidentsPayload?.results || incidentsPayload?.data || incidentsPayload || [];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((incident: any, index: number) => {
+    const type = String(incident.type || incident.incident_type || incident.event || '').toLowerCase().replaceAll('_', '-');
+    const isGoal = type.includes('goal');
+    const isCard = type.includes('card') || ['yellow', 'red', 'second-yellow'].includes(type);
+    const isSubstitution = type.includes('substitution') || type === 'sub';
+    if (!isGoal && !isCard && !isSubstitution && type !== 'var') return null;
+    const player = personName(incident.player) || personName(incident.player_in) || personName(incident.in);
+    const minute = numberAt(incident, [['minute'], ['time', 'minute']]);
+    const addedTime = numberAt(incident, [['added_time'], ['injury_time']]);
+    return {
+      id: incident.id || `${type}-${minute ?? 'na'}-${player || index}`,
+      type: isGoal ? 'goal' : isCard ? (type.includes('red') ? 'red-card' : 'yellow-card') : isSubstitution ? 'substitution' : 'var',
+      minute,
+      addedTime,
+      player,
+      assist: personName(incident.assist),
+      playerOut: personName(incident.player_out) || personName(incident.out),
+      team: incident.is_home === true ? 'home' : incident.is_home === false ? 'away' : incident.team || incident.side || null,
+      homeScore: numberAt(incident, [['home_score'], ['score', 'home']]),
+      awayScore: numberAt(incident, [['away_score'], ['score', 'away']]),
+      goalType: incident.goal_type || null,
+    };
+  }).filter(Boolean).sort((a: any, b: any) =>
+    Number(a.minute ?? 999) - Number(b.minute ?? 999) || Number(a.addedTime || 0) - Number(b.addedTime || 0));
+}
+
 export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPayload?: any) {
   const event = eventPayload?.event || eventPayload?.data || eventPayload || {};
   const stats = statsPayload?.stats || statsPayload?.data?.stats || statsPayload?.data || statsPayload || event?.stats || {};
@@ -57,6 +91,7 @@ export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPa
     shotmap: statsPayload?.shotmap || stats?.shotmap || [],
     momentum: statsPayload?.momentum || stats?.momentum || [],
     incidents: Array.isArray(incidents) ? incidents : [],
+    keyEvents: parseBsdKeyEvents(incidents),
   };
 }
 

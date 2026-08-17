@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+type LiveAlert = { id: string; fixtureId: string; title: string; detail: string };
 
 function MatchCard({ row }: { row: any }) {
   const fixture = row.fixture;
@@ -39,11 +41,44 @@ export default function LivePage() {
   const [data, setData] = useState<any>({ matches: [], goals: 0, target: 24 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [alerts, setAlerts] = useState<LiveAlert[]>([]);
+  const previousScores = useRef<Record<string, number>>({});
+  const hasLoaded = useRef(false);
   const load = useCallback(async () => {
     try {
       const response = await fetch('/api/live', { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Live refresh failed');
+      const nextScores: Record<string, number> = {};
+      for (const row of body.matches || []) {
+        const fixture = row.fixture;
+        const fixtureId = String(fixture.id);
+        const score = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
+        nextScores[fixtureId] = score;
+        const previous = previousScores.current[fixtureId];
+        if (hasLoaded.current && fixture.data_provider === 'bsd' && previous != null && score > previous) {
+          let scorer = 'Goal scored';
+          let minute = row.live?.minute != null ? `${row.live.minute}′` : 'Live';
+          try {
+            const detailResponse = await fetch(`/api/live/${fixtureId}`, { cache: 'no-store' });
+            const matchDetail = await detailResponse.json();
+            const goals = (matchDetail.live?.keyEvents || []).filter((event: any) => event.type === 'goal');
+            const goal = goals.at(-1);
+            if (goal?.player) scorer = goal.player;
+            if (goal?.minute != null) minute = `${goal.minute}${goal.addedTime ? `+${goal.addedTime}` : ''}′`;
+          } catch { /* Keep the score alert if incident detail is briefly unavailable. */ }
+          const alertId = `${fixtureId}-${score}`;
+          setAlerts((current) => current.some((alert) => alert.id === alertId) ? current : [...current, {
+            id: alertId,
+            fixtureId,
+            title: `⚽ ${fixture.home_team} ${fixture.home_score}–${fixture.away_score} ${fixture.away_team}`,
+            detail: `${minute} · ${scorer} · picked by ${row.player_name}`,
+          }]);
+          window.setTimeout(() => setAlerts((current) => current.filter((alert) => alert.id !== alertId)), 15_000);
+        }
+      }
+      previousScores.current = nextScores;
+      hasLoaded.current = true;
       setData(body); setError('');
     } catch (cause: any) { setError(cause.message); }
     finally { setLoading(false); }
@@ -61,6 +96,13 @@ export default function LivePage() {
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-5 pb-24 space-y-5">
+      <div className="fixed right-3 top-3 z-[90] w-[min(24rem,calc(100vw-1.5rem))] space-y-2" aria-live="polite">
+        {alerts.map((alert) => <Link key={alert.id} href={`/live/${alert.fixtureId}`} className="block rounded-xl border border-emerald-500/60 bg-slate-900 p-3 shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800">
+          <div className="text-sm font-bold text-white">{alert.title}</div>
+          <div className="mt-1 text-xs text-emerald-300">{alert.detail}</div>
+          <div className="mt-2 text-[10px] uppercase tracking-wide text-slate-400">Click to open match →</div>
+        </Link>)}
+      </div>
       <section className="card overflow-hidden">
         <div className="flex items-end justify-between">
           <div><div className="text-xs uppercase tracking-widest text-slate-400">Goal score</div><h1 className="text-xl font-bold text-white">Live picks</h1></div>
@@ -80,4 +122,3 @@ export default function LivePage() {
     </main>
   );
 }
-
