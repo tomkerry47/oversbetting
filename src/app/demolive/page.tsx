@@ -32,6 +32,7 @@ function eventMinute(event: any) {
 }
 
 function itemTeam(item: any): string | null {
+  if (!item) return null;
   return item.team || item.side || (item.home === true ? 'home' : item.home === false ? 'away' : null);
 }
 
