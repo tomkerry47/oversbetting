@@ -104,6 +104,7 @@ def bsd_get(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
     raise last_error or RuntimeError(f"BSD API request failed for {path}")
 
 STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
+BSD_FORM_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 RAPIDAPI_REQUEST_LIMIT: int | None = None
 RAPIDAPI_REQUESTS_USED = 0
 
@@ -519,9 +520,76 @@ def _find_number(node: Any, wanted: set[str]) -> float | None:
     return None
 
 
+def fetch_bsd_team_form(
+    team_id: int,
+    league_id: int,
+    fixture_date: str,
+    league_name: str,
+) -> List[Dict[str, Any]]:
+    cache_key = f"{team_id}:{league_id}:{fixture_date}"
+    if cache_key in BSD_FORM_CACHE:
+        return BSD_FORM_CACHE[cache_key]
+
+    payload = bsd_get("/events/", {
+        "team_id": team_id,
+        "league_id": league_id,
+        "status": "finished",
+        "date_to": fixture_date,
+        "limit": 10,
+        "offset": 0,
+    })
+    events = _list_payload(payload)
+    events.sort(key=lambda event: str(event.get("event_date") or ""), reverse=True)
+    form: List[Dict[str, Any]] = []
+    for event in events:
+        if int(event.get("league_id") or 0) != league_id:
+            continue
+        home_id = event.get("home_team_id")
+        away_id = event.get("away_team_id")
+        if team_id not in {home_id, away_id}:
+            continue
+        home_score = int(event.get("home_score") or 0)
+        away_score = int(event.get("away_score") or 0)
+        team_is_home = home_id == team_id
+        team_score = home_score if team_is_home else away_score
+        opponent_score = away_score if team_is_home else home_score
+        result = "W" if team_score > opponent_score else "L" if team_score < opponent_score else "D"
+        raw_date = str(event.get("event_date") or "")
+        try:
+            match_date = dt.datetime.fromisoformat(raw_date.replace("Z", "+00:00")).strftime("%d/%m/%Y")
+        except ValueError:
+            match_date = raw_date[:10]
+        form.append({
+            "result": result,
+            "homeScore": home_score,
+            "awayScore": away_score,
+            "opponent": event.get("away_team") if team_is_home else event.get("home_team"),
+            "opponentPosition": None,
+            "homeAway": "H" if team_is_home else "A",
+            "date": match_date,
+            "competition": league_name,
+        })
+        if len(form) == 5:
+            break
+
+    BSD_FORM_CACHE[cache_key] = form
+    return form
+
+
 def enrich_bsd_fixtures(rows: List[Dict[str, Any]]) -> None:
     for row in rows:
         event_id = int(row["bsd_event_id"])
+        fixture_date = str(row.get("kick_off") or "")[:10]
+        for side in ("home", "away"):
+            team_id = row.get(f"{side}_team_id")
+            if not team_id:
+                continue
+            try:
+                row[f"{side}_form"] = fetch_bsd_team_form(
+                    int(team_id), int(row["league_id"]), fixture_date, str(row["league_name"])
+                )
+            except Exception as exc:
+                print(f"BSD form unavailable for team {team_id}: {exc}", file=sys.stderr)
         try:
             prediction = bsd_get(f"/events/{event_id}/prediction/")
             probability = _find_number(prediction, {"prob_over_25", "over_25_probability"})
