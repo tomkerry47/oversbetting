@@ -390,28 +390,13 @@ export default function FixtureSelector({
                                 {isSelected && '✓'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="w-full grid grid-cols-[minmax(0,1fr)_84px] sm:flex sm:items-center sm:justify-between gap-2">
-                                  <div className="text-sm font-medium text-white flex items-start sm:items-center gap-1.5 min-w-0">
-                                    {fixture.is_star_pick && (
-                                      <span
-                                        className="inline-flex items-center rounded-md bg-amber-500/20 border border-amber-400/60 px-1 py-0.5 text-[10px] text-amber-300 flex-shrink-0"
-                                        title={fixture.star_rank ? `Star pick #${fixture.star_rank}` : 'Star pick'}
-                                      >
-                                        ⭐
-                                      </span>
-                                    )}
-                                    {fixture.data_provider === 'bsd' && fixture.over_25_prediction != null && (
-                                      <span className="inline-flex items-center rounded-md bg-violet-500/15 border border-violet-400/40 px-1.5 py-0.5 text-[10px] text-violet-200 flex-shrink-0">
-                                        {Math.round(fixture.over_25_prediction)}% O2.5
-                                      </span>
-                                    )}
-                                    <span className="whitespace-normal break-words leading-snug">
-                                      {fixture.home_team}
-                                      <span className="text-slate-500 text-xs mx-1">vs</span>
-                                      {fixture.away_team}
-                                    </span>
+                                <div className="w-full min-w-0">
+                                  <div className="text-sm font-medium text-white whitespace-normal break-words leading-snug">
+                                    {fixture.home_team}
+                                    <span className="text-slate-500 text-xs mx-1">vs</span>
+                                    {fixture.away_team}
                                   </div>
-                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5 whitespace-nowrap flex-shrink-0 w-[84px] sm:w-auto">
+                                  <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 whitespace-nowrap">
                                     <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
                                       KO {formatKickoffTime(fixture.kick_off)}
                                     </span>
@@ -429,6 +414,19 @@ export default function FixtureSelector({
                                         </>
                                       );
                                     })()}
+                                    {fixture.data_provider === 'bsd' && fixture.over_25_prediction != null && (
+                                      <span className="inline-flex items-center rounded-md bg-violet-500/15 border border-violet-400/40 px-1.5 py-0.5 text-[10px] text-violet-200">
+                                        {Math.round(fixture.over_25_prediction)}% O2.5
+                                      </span>
+                                    )}
+                                    {fixture.is_star_pick && (
+                                      <span
+                                        className="inline-flex items-center rounded-md bg-amber-500/20 border border-amber-400/60 px-1.5 py-0.5 text-[10px] text-amber-300"
+                                        title={fixture.star_rank ? `Star pick #${fixture.star_rank}` : 'Star pick'}
+                                      >
+                                        ⭐
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 {isPickedByOther && (
