@@ -10,6 +10,14 @@ type HistoryWeek = Week & {
   goals_recorded: number;
 };
 
+type MatchStats = {
+  shotsOnTarget: { home: number | null; away: number | null };
+  shots: { home: number | null; away: number | null };
+  xg: { home: number | null; away: number | null };
+  possession: { home: number | null; away: number | null };
+  corners: { home: number | null; away: number | null };
+};
+
 export default function HistoryPage() {
   const [weeks, setWeeks] = useState<HistoryWeek[]>([]);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
@@ -21,6 +29,10 @@ export default function HistoryPage() {
   const [weekLoadErrors, setWeekLoadErrors] = useState<Record<number, string>>({});
   const [checkingResults, setCheckingResults] = useState<number | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [expandedResult, setExpandedResult] = useState<number | null>(null);
+  const [matchStats, setMatchStats] = useState<Record<number, MatchStats>>({});
+  const [statsLoading, setStatsLoading] = useState<number | null>(null);
+  const [statsErrors, setStatsErrors] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const fetchWeeks = async () => {
@@ -118,6 +130,36 @@ export default function HistoryPage() {
       setCheckError('Network error while triggering results workflow');
     } finally {
       setCheckingResults(null);
+    }
+  };
+
+  const toggleResultStats = async (selection: Selection, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selection.fixture) return;
+    if (expandedResult === selection.id) {
+      setExpandedResult(null);
+      return;
+    }
+    setExpandedResult(selection.id);
+    if (matchStats[selection.fixture.id] || statsLoading === selection.fixture.id) return;
+    setStatsLoading(selection.fixture.id);
+    setStatsErrors((previous) => {
+      const next = { ...previous };
+      delete next[selection.fixture!.id];
+      return next;
+    });
+    try {
+      const response = await fetch(`/api/match-stats/${selection.fixture.id}`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Match statistics are unavailable');
+      setMatchStats((previous) => ({ ...previous, [selection.fixture!.id]: body.stats }));
+    } catch (cause: any) {
+      setStatsErrors((previous) => ({
+        ...previous,
+        [selection.fixture!.id]: cause?.message || 'Match statistics are unavailable',
+      }));
+    } finally {
+      setStatsLoading(null);
     }
   };
 
@@ -247,24 +289,61 @@ export default function HistoryPage() {
                             {player}
                           </h4>
                           <div className="space-y-1">
-                            {playerSelections.map((sel) => (
-                              <div
-                                key={sel.id}
-                                className="flex items-center justify-between text-xs"
-                              >
-                                <span className="text-slate-300 truncate mr-2">
-                                  {getResultEmoji(sel.result)}{' '}
-                                  {sel.fixture?.is_star_pick ? '⭐ ' : ''}
-                                  {sel.fixture?.home_team} vs{' '}
-                                  {sel.fixture?.away_team}
-                                </span>
-                                <span className="text-slate-400 flex-shrink-0">
-                                  {sel.fixture?.home_score !== null
-                                    ? `${sel.fixture?.home_score}-${sel.fixture?.away_score}`
-                                    : '-'}
-                                </span>
-                              </div>
-                            ))}
+                            {playerSelections.map((sel) => {
+                              const fixtureId = sel.fixture?.id;
+                              const isStatsExpanded = expandedResult === sel.id;
+                              const stats = fixtureId ? matchStats[fixtureId] : undefined;
+                              const rows = stats ? [
+                                ['Shots on target', stats.shotsOnTarget, ''],
+                                ['Total shots', stats.shots, ''],
+                                ['xG', stats.xg, ''],
+                                ['Possession', stats.possession, '%'],
+                                ['Corners', stats.corners, ''],
+                              ] as const : [];
+                              const visibleRows = rows.filter(([, values]) => values.home !== null || values.away !== null);
+                              return (
+                                <div key={sel.id} className="rounded-lg overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={(event) => toggleResultStats(sel, event)}
+                                    className={`w-full flex items-center justify-between gap-2 text-xs rounded-lg px-2 py-2 text-left transition-colors ${isStatsExpanded ? 'bg-slate-700/70' : 'hover:bg-slate-800'}`}
+                                  >
+                                    <span className="text-slate-300 truncate">
+                                      {getResultEmoji(sel.result)}{' '}
+                                      {sel.fixture?.is_star_pick ? '⭐ ' : ''}
+                                      {sel.fixture?.home_team} vs {sel.fixture?.away_team}
+                                    </span>
+                                    <span className="text-slate-400 flex-shrink-0 flex items-center gap-2">
+                                      {sel.fixture?.home_score !== null
+                                        ? `${sel.fixture?.home_score}-${sel.fixture?.away_score}`
+                                        : '-'}
+                                      <span className={`transition-transform ${isStatsExpanded ? 'rotate-180' : ''}`}>⌄</span>
+                                    </span>
+                                  </button>
+                                  {isStatsExpanded && fixtureId && (
+                                    <div className="mx-2 mb-2 rounded-b-lg border border-t-0 border-slate-700 bg-slate-950/60 p-3">
+                                      <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-[10px] font-semibold text-slate-400 mb-2">
+                                        <span className="truncate text-left">{sel.fixture?.home_team}</span>
+                                        <span>Match stats</span>
+                                        <span className="truncate text-right">{sel.fixture?.away_team}</span>
+                                      </div>
+                                      {statsLoading === fixtureId && <p className="py-3 text-center text-xs text-slate-500">Loading match stats…</p>}
+                                      {statsErrors[fixtureId] && <p className="py-2 text-center text-xs text-amber-400">{statsErrors[fixtureId]}</p>}
+                                      {stats && visibleRows.length === 0 && <p className="py-2 text-center text-xs text-slate-500">No detailed statistics were recorded for this match.</p>}
+                                      <div className="space-y-1.5">
+                                        {visibleRows.map(([label, values, suffix]) => (
+                                          <div key={label} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
+                                            <span className="text-left font-semibold text-white">{values.home ?? '–'}{values.home !== null ? suffix : ''}</span>
+                                            <span className="text-slate-400">{label}</span>
+                                            <span className="text-right font-semibold text-white">{values.away ?? '–'}{values.away !== null ? suffix : ''}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {playerFines.length > 0 && (
