@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import sys
 import time
@@ -622,7 +623,15 @@ def enrich_bsd_fixtures(rows: List[Dict[str, Any]]) -> None:
             prediction = bsd_get(f"/events/{event_id}/prediction/")
             probability = _find_number(prediction, {"prob_over_25", "over_25_probability"})
             row["over_25_prediction"] = probability
-            row["star_score"] = probability
+            markets = prediction.get("markets") or (prediction.get("prediction") or {}).get("markets") or {}
+            expected_goals = markets.get("expected_goals") or {}
+            expected_home = _find_number(expected_goals, {"home"})
+            expected_away = _find_number(expected_goals, {"away"})
+            row["_expected_total_goals"] = (
+                expected_home + expected_away
+                if expected_home is not None and expected_away is not None
+                else None
+            )
         except Exception as exc:
             print(f"BSD prediction unavailable for {event_id}: {exc}", file=sys.stderr)
         try:
@@ -637,11 +646,7 @@ def enrich_bsd_fixtures(rows: List[Dict[str, Any]]) -> None:
             print(f"BSD odds unavailable for {event_id}: {exc}", file=sys.stderr)
         row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
 
-    ranked = [row for row in rows if isinstance(row.get("over_25_prediction"), (int, float))]
-    ranked.sort(key=lambda row: (row["over_25_prediction"], -int(row["bsd_event_id"])), reverse=True)
-    for rank, row in enumerate(ranked[:5], 1):
-        row["is_star_pick"] = True
-        row["star_rank"] = rank
+    apply_bsd_star_rankings(rows)
 
 
 def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
@@ -805,6 +810,73 @@ def recent_goals_average(form_rows: List[Dict[str, Any]]) -> float | None:
     if not totals:
         return None
     return sum(totals) / len(totals)
+
+
+def recent_over_25_rate(form_rows: List[Dict[str, Any]]) -> float | None:
+    totals = [
+        float(match["homeScore"] + match["awayScore"])
+        for match in form_rows
+        if isinstance(match.get("homeScore"), (int, float))
+        and isinstance(match.get("awayScore"), (int, float))
+    ]
+    if not totals:
+        return None
+    return sum(total > 2.5 for total in totals) / len(totals)
+
+
+def over_25_probability_from_mean(goals_mean: float | None) -> float | None:
+    if goals_mean is None or goals_mean < 0:
+        return None
+    # Poisson estimate of three or more goals from an expected/observed goal mean.
+    return 1.0 - math.exp(-goals_mean) * (1.0 + goals_mean + (goals_mean ** 2 / 2.0))
+
+
+def market_over_25_probability(over_odds: Any, under_odds: Any) -> float | None:
+    over_decimal = fractional_to_decimal(over_odds)
+    under_decimal = fractional_to_decimal(under_odds)
+    if not over_decimal or not under_decimal or over_decimal <= 1 or under_decimal <= 1:
+        return None
+    over_implied = 1.0 / over_decimal
+    under_implied = 1.0 / under_decimal
+    return over_implied / (over_implied + under_implied)
+
+
+def apply_bsd_star_rankings(rows: List[Dict[str, Any]]) -> None:
+    ranked: List[Dict[str, Any]] = []
+    for row in rows:
+        home_form = row.get("home_form") or []
+        away_form = row.get("away_form") or []
+        combined_form = home_form + away_form
+        recent_average = recent_goals_average(combined_form)
+        raw_prediction = row.get("over_25_prediction")
+        prediction_probability = (
+            max(0.0, min(1.0, float(raw_prediction) / (100.0 if float(raw_prediction) > 1 else 1.0)))
+            if isinstance(raw_prediction, (int, float)) else None
+        )
+
+        components = [
+            (0.55, prediction_probability),
+            (0.15, over_25_probability_from_mean(row.get("_expected_total_goals"))),
+            (0.10, over_25_probability_from_mean(recent_average)),
+            (0.10, recent_over_25_rate(combined_form)),
+            (0.10, market_over_25_probability(row.get("odds_over_25"), row.get("odds_under_25"))),
+        ]
+        available = [(weight, value) for weight, value in components if value is not None]
+        row["is_star_pick"] = False
+        row["star_rank"] = None
+        row["star_score"] = (
+            round(100.0 * sum(weight * value for weight, value in available) / sum(weight for weight, _ in available), 2)
+            if available else None
+        )
+        # BSD's prediction remains the required primary signal; the other inputs
+        # confirm and refine it rather than creating picks without model coverage.
+        if row["star_score"] is not None and prediction_probability is not None:
+            ranked.append(row)
+
+    ranked.sort(key=lambda row: (row["star_score"], -int(row["bsd_event_id"])), reverse=True)
+    for rank, row in enumerate(ranked[:5], 1):
+        row["is_star_pick"] = True
+        row["star_rank"] = rank
 
 
 def _normalize(value: float | None, min_value: float | None, max_value: float | None, invert: bool = False) -> float:
