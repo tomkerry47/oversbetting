@@ -151,9 +151,14 @@ export function toLeagueCode(leagueNameRaw: string | null | undefined): string {
 /**
  * Calculate week number based on the season start.
  */
-export function calculateWeekNumber(saturdayDate: string, seasonStart: string = '2025-08-01'): number {
-  const saturday = new Date(saturdayDate);
-  const start = new Date(seasonStart);
+export function calculateWeekNumber(saturdayDate: string, seasonStart?: string): number {
+  const saturday = new Date(`${saturdayDate}T00:00:00Z`);
+  const seasonYear = saturday.getUTCMonth() >= 7
+    ? saturday.getUTCFullYear()
+    : saturday.getUTCFullYear() - 1;
+  const start = seasonStart
+    ? new Date(`${seasonStart}T00:00:00Z`)
+    : new Date(Date.UTC(seasonYear, 7, 1));
   const diffTime = saturday.getTime() - start.getTime();
   const diffWeeks = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
   return Math.max(1, diffWeeks + 1);
