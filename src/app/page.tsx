@@ -183,7 +183,7 @@ export default function HomePage() {
     return false;
   }, [getFixturesUrl, loadRounds, loadSelectionsForWeek]);
 
-  const triggerFixtureSync = useCallback(async (query: RoundQuery) => {
+  const triggerFixtureSync = useCallback(async (query: RoundQuery, bsdOnly = false) => {
     setRefreshing(true);
     setError(null);
     setLoadingMessage('Triggering fixture sync job...');
@@ -198,6 +198,7 @@ export default function HomePage() {
           weekOffset: 0,
           enrich: MANUAL_TRIGGER_ENRICH,
           enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
+          bsdOnly,
         };
       } else if (query.mode === 'custom') {
         triggerPayload = {
@@ -206,6 +207,7 @@ export default function HomePage() {
           isCustom: true,
           enrich: MANUAL_TRIGGER_ENRICH,
           enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
+          bsdOnly,
         };
       } else {
         triggerPayload = {
@@ -213,6 +215,7 @@ export default function HomePage() {
           isCustom: false,
           enrich: MANUAL_TRIGGER_ENRICH,
           enrichOdds: MANUAL_TRIGGER_ENRICH_ODDS,
+          bsdOnly,
         };
       }
 
@@ -372,8 +375,8 @@ export default function HomePage() {
 
   const handleRefreshFixtures = async () => {
     if (fixtures.length > 0) {
-      setLoadingMessage('Fixtures already exist for this round. Refresh skipped to preserve the weekly request budget.');
-      setTimeout(() => setLoadingMessage(''), 5000);
+      setLoadingMessage('Refreshing BSD predictions, odds and recent form. SofaScore fixtures will remain unchanged...');
+      await triggerFixtureSync(activeQuery, true);
       return;
     }
     await triggerFixtureSync(activeQuery);
@@ -452,7 +455,7 @@ export default function HomePage() {
               disabled={refreshing}
               className="btn-secondary !py-2 !px-3 text-xs"
             >
-              {refreshing ? '🔄' : '🔄 Refresh'}
+              {refreshing ? '🔄' : fixtures.length > 0 ? '🔄 Refresh BSD' : '🔄 Load fixtures'}
             </button>
           </div>
           <p className="text-slate-400 text-sm">

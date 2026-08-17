@@ -29,6 +29,10 @@ on:
         description: "Max RapidAPI requests to spend for this round"
         required: false
         default: "20"
+      bsd_only:
+        description: "Refresh BSD fixtures only; leave SofaScore fixtures untouched"
+        required: false
+        default: "false"
 
 jobs:
   sync-fixtures:
@@ -61,6 +65,7 @@ jobs:
           ARGS="$ARGS --enrich=${{ github.event.inputs.enrich }}"
           ARGS="$ARGS --enrichOdds=${{ github.event.inputs.enrich_odds }}"
           ARGS="$ARGS --requestBudget=${{ github.event.inputs.request_budget }}"
+          ARGS="$ARGS --bsdOnly=${{ github.event.inputs.bsd_only }}"
           echo "Running: python scripts/fetch-fixtures-tls.py $ARGS"
           python scripts/fetch-fixtures-tls.py $ARGS
         env:

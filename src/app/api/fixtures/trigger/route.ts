@@ -34,7 +34,7 @@ async function findLatestWorkflowRun(
 
 export async function POST(request: NextRequest) {
   try {
-    const { weekOffset, targetDate, kickoffTime, isCustom, enrich, enrichOdds } = await request.json().catch(() => ({ weekOffset: 1 }));
+    const { weekOffset, targetDate, kickoffTime, isCustom, enrich, enrichOdds, bsdOnly } = await request.json().catch(() => ({ weekOffset: 1 }));
     const workflowWeekOffset = Number.isFinite(Number(weekOffset))
       ? String(Math.max(0, Math.floor(Number(weekOffset))))
       : '1';
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       typeof isCustom === 'boolean' ? String(isCustom) : hasExplicitTarget ? 'true' : 'false';
     const workflowEnrich = typeof enrich === 'boolean' ? String(enrich) : 'false';
     const workflowEnrichOdds = typeof enrichOdds === 'boolean' ? String(enrichOdds) : 'false';
+    const workflowBsdOnly = typeof bsdOnly === 'boolean' ? String(bsdOnly) : 'false';
     const workflowRequestBudget = '20';
 
     // Always dispatch an explicit refresh. The hybrid job upserts by provider
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
         enrich: workflowEnrich,
         enrich_odds: workflowEnrichOdds,
         request_budget: workflowRequestBudget,
+        bsd_only: workflowBsdOnly,
       },
     };
 
@@ -117,6 +119,7 @@ export async function POST(request: NextRequest) {
       enrich: workflowEnrich,
       enrichOdds: workflowEnrichOdds,
       requestBudget: workflowRequestBudget,
+      bsdOnly: workflowBsdOnly,
       runId,
     });
   } catch (error: any) {

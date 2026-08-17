@@ -232,6 +232,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--enrich", type=str, help="Enrich form/positions/star picks: true or false")
     parser.add_argument("--enrichOdds", type=str, help="Fetch per-match odds during enrichment: true or false")
     parser.add_argument("--requestBudget", type=int, help="Max RapidAPI requests to spend for this round")
+    parser.add_argument("--bsdOnly", type=str, help="Refresh BSD fixtures only and leave fallback fixtures untouched")
     return parser.parse_args()
 
 
@@ -1085,6 +1086,18 @@ class SupabaseRest:
             "odds_count": odds_count,
         }
 
+    def get_week_bsd_event_ids(self, week_id: int) -> set[int]:
+        url = f"{self.base_url}/rest/v1/fixtures"
+        params = {
+            "week_id": f"eq.{week_id}",
+            "data_provider": "eq.bsd",
+            "select": "bsd_event_id",
+        }
+        res = self.session.get(url, params=params, timeout=45)
+        if res.status_code >= 300:
+            raise RuntimeError(f"Failed to inspect BSD fixtures: {res.status_code} {res.text[:300]}")
+        return {int(row["bsd_event_id"]) for row in res.json() if row.get("bsd_event_id") is not None}
+
     def should_skip_existing_round(
         self,
         season: str,
@@ -1192,6 +1205,7 @@ def main() -> int:
     is_custom = parse_bool(args.isCustom, bool(args.targetDate and args.kickoffTime))
     enrich = parse_bool(args.enrich, enrich_fixtures_enabled())
     enrich_odds = parse_bool(args.enrichOdds, enrich_odds_enabled())
+    bsd_only = parse_bool(args.bsdOnly, False)
     request_budget = max(1, args.requestBudget) if args.requestBudget else request_budget_default()
     configure_rapidapi_budget(request_budget if use_rapidapi() else None)
     target_date = args.targetDate or get_relevant_saturday(week_offset)
@@ -1203,7 +1217,7 @@ def main() -> int:
         f"Fetching fixtures for target_date={target_date}, kickoff={target_kickoff_time}, "
         f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}, "
         f"source={'RapidAPI' if use_rapidapi() else 'SofaScore direct'}, enrich={enrich}, "
-        f"enrichOdds={enrich_odds}, requestBudget={request_budget if use_rapidapi() else 'unlimited'}"
+        f"enrichOdds={enrich_odds}, bsdOnly={bsd_only}, requestBudget={request_budget if use_rapidapi() else 'unlimited'}"
     )
 
     supabase = SupabaseRest(supabase_url, service_role)
@@ -1213,29 +1227,40 @@ def main() -> int:
         + (", ".join(sorted(supported_bsd)) if supported_bsd else "none")
     )
     bsd_rows = fetch_bsd_fixtures(target_date, target_kickoff_time, supported_bsd)
+    if bsd_only:
+        existing_week = supabase.find_week(season, week_number, is_custom)
+        if not existing_week:
+            print("BSD-only refresh skipped because the round does not exist yet")
+            return 0
+        existing_bsd_ids = supabase.get_week_bsd_event_ids(int(existing_week["id"]))
+        bsd_rows = [row for row in bsd_rows if int(row["bsd_event_id"]) in existing_bsd_ids]
     enrich_bsd_fixtures(bsd_rows)
 
-    tls_session_factory = get_tls_session()
-    with tls_session_factory as tls_session:
-        sofa_payload = fetch_scheduled_events(tls_session, target_date)
-        sofa_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
-        # The catalogue is checked on every run. As BSD adds a tracked league,
-        # its SofaScore fixtures disappear from this fallback automatically.
-        sofa_rows = [row for row in sofa_rows if row["league_name"] not in supported_bsd]
-        if sofa_rows:
-            # Fallback leagues still need their recent form and positions. This
-            # uses league-level calls only; odds and old SofaScore star ranking
-            # are deliberately discarded so BSD remains the sole star source.
-            apply_bulk_enrichment(tls_session, sofa_rows, include_odds=False)
-            for row in sofa_rows:
-                row["is_star_pick"] = False
-                row["star_rank"] = None
-                row["star_score"] = None
-        fixture_rows = bsd_rows + sofa_rows
-        print(f"Found {len(bsd_rows)} BSD + {len(sofa_rows)} SofaScore fallback fixtures")
+    if bsd_only:
+        fixture_rows = bsd_rows
+        print(f"BSD-only refresh found {len(bsd_rows)} fixtures; SofaScore fallback was not requested")
+    else:
+        tls_session_factory = get_tls_session()
+        with tls_session_factory as tls_session:
+            sofa_payload = fetch_scheduled_events(tls_session, target_date)
+            sofa_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
+            # The catalogue is checked on every run. As BSD adds a tracked league,
+            # its SofaScore fixtures disappear from this fallback automatically.
+            sofa_rows = [row for row in sofa_rows if row["league_name"] not in supported_bsd]
+            if sofa_rows:
+                # Fallback leagues still need their recent form and positions. This
+                # uses league-level calls only; odds and old SofaScore star ranking
+                # are deliberately discarded so BSD remains the sole star source.
+                apply_bulk_enrichment(tls_session, sofa_rows, include_odds=False)
+                for row in sofa_rows:
+                    row["is_star_pick"] = False
+                    row["star_rank"] = None
+                    row["star_score"] = None
+            fixture_rows = bsd_rows + sofa_rows
+            print(f"Found {len(bsd_rows)} BSD + {len(sofa_rows)} SofaScore fallback fixtures")
 
-        if not fixture_rows:
-            return 0
+    if not fixture_rows:
+        return 0
 
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
     print(f"BSD prediction star picks: {len(star_rows)} / {len(bsd_rows)} BSD fixtures")
@@ -1254,11 +1279,12 @@ def main() -> int:
 
     fixture_rows = [strip_internal_fields(row) for row in fixture_rows]
     supabase.upsert_fixtures(fixture_rows)
-    supabase.update_week_request_usage(
-        week_id=week["id"],
-        request_budget=request_budget if use_rapidapi() else None,
-        requests_used=RAPIDAPI_REQUESTS_USED if use_rapidapi() else 0,
-    )
+    if not bsd_only:
+        supabase.update_week_request_usage(
+            week_id=week["id"],
+            request_budget=request_budget if use_rapidapi() else None,
+            requests_used=RAPIDAPI_REQUESTS_USED if use_rapidapi() else 0,
+        )
     print(
         f"Stored/updated {len(fixture_rows)} fixtures (with insights) for "
         f"week {week['week_number']}{'.5' if week.get('is_custom') else ''}. "

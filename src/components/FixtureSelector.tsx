@@ -35,6 +35,10 @@ interface FixtureDetails {
     over: string;
     under: string;
   } | null;
+  predictedScore?: string | null;
+  expectedHomeGoals?: number | null;
+  expectedAwayGoals?: number | null;
+  expectedTotalGoals?: number | null;
 }
 
 export default function FixtureSelector({
@@ -60,6 +64,11 @@ export default function FixtureSelector({
     setExpandedFixture(null);
     setFixtureDetails({});
   }, [weekId]);
+
+  useEffect(() => {
+    setExpandedFixture(null);
+    setFixtureDetails({});
+  }, [fixtures]);
 
   const formatKickoffTime = (isoDate: string): string => {
     const date = new Date(isoDate);
@@ -155,23 +164,28 @@ export default function FixtureSelector({
       return;
     }
 
-    // Use cached form/odds from fixtures table when available.
+    // Use cached form/odds from fixtures table when available. BSD prediction
+    // detail is fetched on expansion because it can change after the schedule.
     if (fixture.home_form && fixture.away_form) {
-      setFixtureDetails(prev => ({
-        ...prev,
-        [fixture.id]: {
-          homeForm: fixture.home_form || [],
-          awayForm: fixture.away_form || [],
-          odds:
-            fixture.odds_over_25 || fixture.odds_under_25
-              ? {
-                  over: convertOddsToDecimal(fixture.odds_over_25 || 'N/A'),
-                  under: convertOddsToDecimal(fixture.odds_under_25 || 'N/A'),
-                }
-              : null,
-        },
-      }));
-      setExpandedFixture(expandedFixture === fixture.id ? null : fixture.id);
+      const details: FixtureDetails = {
+        homeForm: fixture.home_form || [],
+        awayForm: fixture.away_form || [],
+        odds: fixture.odds_over_25 || fixture.odds_under_25 ? {
+          over: convertOddsToDecimal(fixture.odds_over_25 || 'N/A'),
+          under: convertOddsToDecimal(fixture.odds_under_25 || 'N/A'),
+        } : null,
+      };
+      if (fixture.data_provider === 'bsd') {
+        try {
+          const response = await fetch(`/api/fixtures/bsd-insights?fixtureId=${fixture.id}`, { cache: 'no-store' });
+          const insight = await response.json();
+          if (response.ok) Object.assign(details, insight);
+        } catch (cause) {
+          console.error('BSD prediction insight unavailable:', cause);
+        }
+      }
+      setFixtureDetails(prev => ({ ...prev, [fixture.id]: details }));
+      setExpandedFixture(fixture.id);
       return;
     }
 
@@ -360,6 +374,11 @@ export default function FixtureSelector({
                       const isLocked = isPickedByOther && !isSelected;
                       const isExpanded = expandedFixture === fixture.id;
                       const details = fixtureDetails[fixture.id];
+                      const recentMatches = details ? [...details.homeForm, ...details.awayForm] : [];
+                      const recentAverageGoals = recentMatches.length > 0
+                        ? recentMatches.reduce((total, match) => total + match.homeScore + match.awayScore, 0) / recentMatches.length : null;
+                      const recentOver25 = recentMatches.length > 0
+                        ? recentMatches.filter((match) => match.homeScore + match.awayScore >= 3).length / recentMatches.length * 100 : null;
 
                       return (
                         <div key={fixture.id}>
@@ -451,6 +470,25 @@ export default function FixtureSelector({
 
                           {isExpanded && details && (
                             <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
+                              {fixture.data_provider === 'bsd' && <>
+                                <h4 className="mb-2 text-xs font-bold text-white">🔮 BSD prediction</h4>
+                                <div className="mb-3 grid grid-cols-2 gap-2">
+                                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
+                                    <div className="text-[9px] uppercase tracking-wide text-violet-300">Predicted score</div>
+                                    <div className="mt-1 text-lg font-black text-white">{details.predictedScore || '–'}</div>
+                                  </div>
+                                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
+                                    <div className="text-[9px] uppercase tracking-wide text-violet-300">Expected total goals</div>
+                                    <div className="mt-1 text-lg font-black text-white">{details.expectedTotalGoals?.toFixed(2) ?? '–'}</div>
+                                    {details.expectedHomeGoals != null && details.expectedAwayGoals != null && <div className="text-[9px] text-slate-400">{details.expectedHomeGoals.toFixed(2)} + {details.expectedAwayGoals.toFixed(2)}</div>}
+                                  </div>
+                                </div>
+                                <h4 className="mb-2 text-xs font-bold text-white">⚽ Recent goal trend</h4>
+                                <div className="mb-3 grid grid-cols-2 gap-2">
+                                  <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Average total goals</div><div className="mt-1 text-base font-bold text-white">{recentAverageGoals?.toFixed(2) ?? '–'}</div></div>
+                                  <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Recent Over 2.5</div><div className="mt-1 text-base font-bold text-white">{recentOver25 != null ? `${Math.round(recentOver25)}%` : '–'}</div><div className="text-[9px] text-slate-500">Last {recentMatches.length} combined</div></div>
+                                </div>
+                              </>}
                               <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
