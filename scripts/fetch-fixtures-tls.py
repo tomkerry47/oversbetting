@@ -257,13 +257,9 @@ def get_current_season() -> str:
     return f"{year - 1}-{str(year)[-2:]}"
 
 
-def calculate_week_number(saturday_date: str, season_start: str | None = None) -> int:
+def calculate_week_number(saturday_date: str, season_start: str = "2025-08-01") -> int:
     saturday = dt.date.fromisoformat(saturday_date)
-    if season_start:
-        start = dt.date.fromisoformat(season_start)
-    else:
-        season_year = saturday.year if saturday.month >= 8 else saturday.year - 1
-        start = dt.date(season_year, 8, 1)
+    start = dt.date.fromisoformat(season_start)
     diff_weeks = (saturday - start).days // 7
     return max(1, diff_weeks + 1)
 
