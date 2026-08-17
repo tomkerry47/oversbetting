@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
+import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 export default function MatchCentrePage() {
   const { fixtureId } = useParams<{ fixtureId: string }>();
@@ -19,6 +20,9 @@ export default function MatchCentrePage() {
       setData(body); setError('');
     } catch (cause: any) { setError(cause.message); }
   }, [fixtureId]);
+  const handleMatchEvent = useCallback((event: any) => {
+    setData((current: any) => current ? { ...current, live: mergeBsdLiveEvent(current.live, event) } : current);
+  }, []);
   useEffect(() => { load(); const timer = window.setInterval(load, 10_000); return () => clearInterval(timer); }, [load]);
 
   const fixture = data?.fixture;
@@ -35,7 +39,7 @@ export default function MatchCentrePage() {
           <LiveKeyEvents events={live?.keyEvents} />
           <div className="mt-4 flex justify-center gap-6 text-xs text-slate-300"><span>Shots on target {live?.homeShotsOnTarget ?? '–'}–{live?.awayShotsOnTarget ?? '–'}</span><span>{live?.xgEstimated ? 'xG est.' : 'xG'} {live?.homeXg?.toFixed?.(2) ?? '–'}–{live?.awayXg?.toFixed?.(2) ?? '–'}</span></div>
         </section>
-        <LivePitch detail={live} streamUrl={`/api/live/${fixtureId}/stream`} />
+        <LivePitch detail={live} streamUrl={`/api/live/${fixtureId}/stream`} onMatchEvent={handleMatchEvent} />
         <LiveStats stats={live} />
       </>}
     </main>

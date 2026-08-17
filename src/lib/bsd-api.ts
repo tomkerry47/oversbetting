@@ -36,12 +36,12 @@ export function createBsdLiveEventStream(eventId: number) {
         try {
           const message = JSON.parse(raw.toString());
           if (message.type === 'ping') {
-            socket?.send(JSON.stringify({ type: 'pong' }));
+            socket?.send(JSON.stringify({ action: 'ping' }));
             return;
           }
           if (message.type === 'subscribed') {
-            send({ type: 'snapshot', event: message.event, history: message.history || [], livedata: message.livedata || [] });
-          } else if (['action', 'poem', 'livedata', 'event'].includes(message.type)) {
+            send({ type: 'snapshot', source: message.source, event: message.event, history: message.history || [], livedata: message.livedata || [] });
+          } else if (['action', 'poem', 'livedata', 'event', 'error'].includes(message.type)) {
             send(message);
           }
         } catch { /* Ignore provider frames that are not JSON. */ }
@@ -170,7 +170,7 @@ export async function fetchBsdMatch(eventId: number, includeTimeline = false) {
     homeScore: realtime?.homeScore ?? base.homeScore,
     awayScore: realtime?.awayScore ?? base.awayScore,
     minute: realtime?.minute ?? base.minute,
-    status: socket.event?.status || socket.event?.event?.status || base.status,
+    status: realtime?.status || base.status,
     actions: socket.actions,
   };
 }
@@ -196,7 +196,7 @@ export function fetchBsdSocketSnapshot(eventId: number): Promise<{ actions: any[
     socket.on('message', (raw) => {
       try {
         const message = JSON.parse(raw.toString());
-        if (message.type === 'ping') socket.send(JSON.stringify({ type: 'pong' }));
+        if (message.type === 'ping') socket.send(JSON.stringify({ action: 'ping' }));
         if (message.type === 'event') event = message.event || message.data || message;
         if (message.type === 'subscribed' && message.event) event = message.event;
         if (message.type === 'action' || message.type === 'poem' || message.type === 'livedata') actions.push(message);
@@ -216,28 +216,31 @@ export function fetchBsdSocketMatches(eventIds: number[]): Promise<Record<number
   return new Promise((resolve) => {
     const socket = new WebSocket('wss://sports.bzzoiro.com/live/football/', ['token', token()]);
     const events: Record<number, any> = {};
+    const requested = eventIds.slice(0, 10);
+    const completed = new Set<number>();
     let settled = false;
-    let finishTimer: NodeJS.Timeout | undefined;
     const hardTimer = setTimeout(finish, 4000);
     function finish() {
       if (settled) return;
       settled = true;
       clearTimeout(hardTimer);
-      if (finishTimer) clearTimeout(finishTimer);
       socket.close();
       resolve(events);
     }
-    socket.on('open', () => eventIds.slice(0, 10).forEach((eventId) =>
+    socket.on('open', () => requested.forEach((eventId) =>
       socket.send(JSON.stringify({ action: 'subscribe', event_id: eventId }))));
     socket.on('message', (raw) => {
       try {
         const message = JSON.parse(raw.toString());
-        if (message.type === 'ping') socket.send(JSON.stringify({ type: 'pong' }));
+        if (message.type === 'ping') socket.send(JSON.stringify({ action: 'ping' }));
         const eventId = Number(message.event_id);
-        if (eventId && message.type === 'subscribed' && message.event) events[eventId] = message.event;
+        if (eventId && message.type === 'subscribed') {
+          if (message.event) events[eventId] = message.event;
+          completed.add(eventId);
+        }
         if (eventId && message.type === 'event') events[eventId] = message.event || message.data || message;
-        clearTimeout(finishTimer);
-        finishTimer = setTimeout(finish, 500);
+        if (eventId && message.type === 'error') completed.add(eventId);
+        if (completed.size >= requested.length) finish();
       } catch { /* Ignore non-JSON keepalive frames. */ }
     });
     socket.on('error', finish);

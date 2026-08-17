@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
+import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 type Pair = { home: number | null; away: number | null };
 type Match = {
@@ -20,7 +21,7 @@ type Match = {
   stats: Record<string, Pair>;
 };
 
-function MatchModal({ match, detail, onClose }: { match: Match; detail: any; onClose: () => void }) {
+function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; detail: any; onClose: () => void; onMatchEvent: (event: any) => void }) {
   const stats = detail || match.stats || {};
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/80 p-2 backdrop-blur-sm sm:p-5" onMouseDown={onClose}>
@@ -35,7 +36,7 @@ function MatchModal({ match, detail, onClose }: { match: Match; detail: any; onC
             <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{match.homeTeam}</div><div className="text-4xl font-black text-white">{detail?.homeScore ?? match.homeScore ?? 0}–{detail?.awayScore ?? match.awayScore ?? 0}</div><div className="font-semibold text-white">{match.awayTeam}</div></div>
             <LiveKeyEvents events={detail?.keyEvents} />
           </section>
-          <LivePitch detail={detail} streamUrl={`/api/demolive/${match.id}/stream`} />
+          <LivePitch detail={detail} streamUrl={`/api/demolive/${match.id}/stream`} onMatchEvent={onMatchEvent} />
           <LiveStats stats={stats} />
         </div>
       </div>
@@ -93,12 +94,12 @@ export default function DemoLivePage() {
             <button key={match.id} onClick={() => setSelectedId(match.id)} className="rounded-xl border border-slate-700 bg-slate-800/50 p-3 text-left transition-colors hover:border-emerald-600 hover:bg-slate-800">
               <div className="flex justify-between gap-2 text-[10px] text-slate-400"><span className="truncate">{match.league}</span><span>{match.minute != null ? `${match.minute}'` : match.status}</span></div>
               <div className="mt-1 grid grid-cols-[1fr_auto] gap-2 text-sm text-white"><div><div>{match.homeTeam}</div><div>{match.awayTeam}</div></div><div className="text-right text-base font-bold"><div>{match.homeScore ?? '–'}</div><div>{match.awayScore ?? '–'}</div></div></div>
-              <div className="mt-2 flex gap-1.5"><span className={`rounded px-1.5 py-0.5 text-[9px] ${match.liveWebsocket ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-400'}`}>WS</span>{match.websocketPlus && <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-[9px] text-violet-300">WS+</span>}<span className="ml-auto text-[10px] text-emerald-400">Open match →</span></div>
+              <div className="mt-2 flex gap-1.5"><span className={`rounded px-1.5 py-0.5 text-[9px] ${match.websocketPlus ? 'bg-violet-500/20 text-violet-300' : 'bg-emerald-500/20 text-emerald-300'}`}>{match.websocketPlus ? 'WS+' : 'Basic'}</span><span className="ml-auto text-[10px] text-emerald-400">Open match →</span></div>
             </button>
           ))}
         </div>
       </section>
-      {selected && <MatchModal match={selected} detail={detail} onClose={() => { setSelectedId(null); setDetail(null); }} />}
+      {selected && <MatchModal match={selected} detail={detail} onMatchEvent={(event) => setDetail((current: any) => mergeBsdLiveEvent(current, event))} onClose={() => { setSelectedId(null); setDetail(null); }} />}
     </main>
   );
 }

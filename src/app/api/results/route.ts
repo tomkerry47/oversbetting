@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         const live = await fetchBsdMatch(fixture.bsd_event_id);
         const rawStatus = String(live.status || '').toLowerCase().replaceAll('_', '');
         const status = ['finished', 'ft', 'ended'].includes(rawStatus)
-          ? 'FT' : ['inprogress', 'live', 'halftime', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
+          ? 'FT' : ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
         await supabase.from('fixtures').update({
           home_score: live.homeScore, away_score: live.awayScore,
           match_status: status, live_updated_at: new Date().toISOString(),
