@@ -17,6 +17,7 @@ export default function LiveStats({ stats }: { stats: any }) {
       <StatRow label="Shots on target" home={stats.homeShotsOnTarget ?? stats.shotsOnTarget?.home} away={stats.awayShotsOnTarget ?? stats.shotsOnTarget?.away} />
       <StatRow label="Total shots" home={stats.homeShots ?? stats.shots?.home} away={stats.awayShots ?? stats.shots?.away} />
       <StatRow label="Big chances" home={stats.homeBigChances} away={stats.awayBigChances} />
+      <StatRow label="Hit woodwork" home={stats.homeHitWoodwork} away={stats.awayHitWoodwork} />
       <StatRow label={stats.xgEstimated ? 'xG (estimated)' : 'xG'} home={stats.homeXg ?? stats.xg?.home} away={stats.awayXg ?? stats.xg?.away} />
       <StatRow label="Possession" home={stats.homePossession ?? stats.possession?.home} away={stats.awayPossession ?? stats.possession?.away} suffix="%" />
       <StatRow label="Pass accuracy" home={stats.homePassAccuracy} away={stats.awayPassAccuracy} suffix="%" />

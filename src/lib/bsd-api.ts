@@ -149,6 +149,8 @@ export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPa
     awayPassAccuracy: numberAt(awayStats, [['pass_accuracy_pct']]),
     homeFouls: numberAt(homeStats, [['fouls']]),
     awayFouls: numberAt(awayStats, [['fouls']]),
+    homeHitWoodwork: numberAt(homeStats, [['hit_woodwork']]),
+    awayHitWoodwork: numberAt(awayStats, [['hit_woodwork']]),
     shotmap: statsPayload?.shotmap || stats?.shotmap || [],
     momentum: statsPayload?.momentum || stats?.momentum || [],
     incidents: Array.isArray(incidents) ? incidents : [],

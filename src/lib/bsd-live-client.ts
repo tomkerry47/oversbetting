@@ -31,5 +31,7 @@ export function mergeBsdLiveEvent(current: any, payload: any) {
     awayPassAccuracy: choose(numberValue(away.pass_accuracy_pct), current?.awayPassAccuracy),
     homeFouls: choose(numberValue(home.fouls), current?.homeFouls),
     awayFouls: choose(numberValue(away.fouls), current?.awayFouls),
+    homeHitWoodwork: choose(numberValue(home.hit_woodwork), current?.homeHitWoodwork),
+    awayHitWoodwork: choose(numberValue(away.hit_woodwork), current?.awayHitWoodwork),
   };
 }
