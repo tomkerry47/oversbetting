@@ -400,6 +400,11 @@ export default function FixtureSelector({
                                         ⭐
                                       </span>
                                     )}
+                                    {fixture.data_provider === 'bsd' && fixture.over_25_prediction != null && (
+                                      <span className="inline-flex items-center rounded-md bg-violet-500/15 border border-violet-400/40 px-1.5 py-0.5 text-[10px] text-violet-200 flex-shrink-0">
+                                        {Math.round(fixture.over_25_prediction)}% O2.5
+                                      </span>
+                                    )}
                                     <span className="whitespace-normal break-words leading-snug">
                                       {fixture.home_team}
                                       <span className="text-slate-500 text-xs mx-1">vs</span>

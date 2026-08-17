@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -39,6 +40,7 @@ API_BASES = (
 )
 RAPIDAPI_HOST = "sofascore.p.rapidapi.com"
 RAPIDAPI_BASE = f"https://{RAPIDAPI_HOST}"
+BSD_API_BASE = "https://sports.bzzoiro.com/api/v2"
 DEFAULT_RETRIES = 3
 GOAL_THRESHOLD = 2
 COMPLETED_STATUSES = {"FT", "AET", "PEN"}
@@ -127,6 +129,30 @@ def fetch_event_result(session: Any, fixture_id: int) -> Dict[str, Any]:
         f"All result API hosts failed for /event/{fixture_id} "
         f"(hosts: {attempted_hosts}; last error: {last_error or 'unknown error'})"
     ) from last_error
+
+
+def fetch_bsd_event_result(event_id: int) -> Dict[str, Any]:
+    token = os.getenv("BZZOIRO_API_TOKEN") or os.getenv("bsd_event_id")
+    if not token:
+        raise RuntimeError("BZZOIRO_API_TOKEN is not set")
+    response = requests.get(
+        f"{BSD_API_BASE}/events/{event_id}/",
+        headers={"Authorization": f"Token {token}", "Accept": "application/json"},
+        timeout=45,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"BSD result error {response.status_code}: {response.text[:250]}")
+    payload = response.json()
+    return payload.get("event") or payload.get("data") or payload
+
+
+def bsd_status_short(value: Any) -> str:
+    status = str(value or "").lower().replace("_", "")
+    if status in {"finished", "ft", "ended"}:
+        return "FT"
+    if status in {"inprogress", "live", "halftime", "paused"}:
+        return "LIVE"
+    return "NS"
 
 
 class SupabaseRest:
@@ -235,17 +261,24 @@ def main() -> int:
     with tls_session_factory as tls_session:
         # Refresh fixture scores/status from SofaScore
         for idx, fixture in enumerate(fixtures):
-            fixture_api_id = fixture["api_fixture_id"]
+            fixture_api_id = fixture.get("provider_fixture_id") or fixture["api_fixture_id"]
             try:
-                event = fetch_event_result(tls_session, fixture_api_id)
-                home_score = (event.get("homeScore") or {}).get("current")
-                away_score = (event.get("awayScore") or {}).get("current")
-                short = status_short((event.get("status") or {}).get("type", "notstarted"))
+                if fixture.get("data_provider") == "bsd":
+                    event = fetch_bsd_event_result(int(fixture.get("bsd_event_id") or fixture_api_id))
+                    home_score = event.get("home_score")
+                    away_score = event.get("away_score")
+                    short = bsd_status_short(event.get("status"))
+                else:
+                    event = fetch_event_result(tls_session, fixture_api_id)
+                    home_score = (event.get("homeScore") or {}).get("current")
+                    away_score = (event.get("awayScore") or {}).get("current")
+                    short = status_short((event.get("status") or {}).get("type", "notstarted"))
 
                 db.patch(
                     "fixtures",
-                    {"api_fixture_id": f"eq.{fixture_api_id}"},
-                    {"home_score": home_score, "away_score": away_score, "match_status": short},
+                    {"id": f"eq.{fixture['id']}"},
+                    {"home_score": home_score, "away_score": away_score, "match_status": short,
+                     "live_updated_at": dt.datetime.now(dt.timezone.utc).isoformat()},
                 )
                 print(f"[Results] Updated fixture {fixture_api_id}: {home_score}-{away_score} ({short})")
             except Exception as exc:

@@ -44,6 +44,9 @@ export interface Week {
 export interface Fixture {
   id: number;
   api_fixture_id: number;
+  data_provider: 'bsd' | 'sofascore';
+  provider_fixture_id: number;
+  bsd_event_id: number | null;
   week_id: number;
   home_team: string;
   away_team: string;
@@ -59,6 +62,10 @@ export interface Fixture {
   home_score: number | null;
   away_score: number | null;
   match_status: string;
+  over_25_prediction: number | null;
+  bsd_live_websocket: boolean;
+  bsd_websocket_plus: boolean;
+  live_updated_at: string | null;
   home_form: Array<{
     result: 'W' | 'D' | 'L';
     homeScore: number;

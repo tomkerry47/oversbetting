@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Picks', icon: '🏟️' },
+  { href: '/live', label: 'Live', icon: '🔴' },
   { href: '/history', label: 'History', icon: '📅' },
   { href: '/stats', label: 'Stats', icon: '📊' },
   { href: '/fines', label: 'Fines', icon: '💰' },
@@ -29,9 +30,9 @@ export default function Navigation() {
 
       {/* Bottom tab bar - mobile native feel */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-700 z-50">
-        <div className="grid grid-cols-4 max-w-lg mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="grid grid-cols-5 max-w-lg mx-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}

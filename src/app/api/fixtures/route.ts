@@ -235,7 +235,7 @@ export async function GET(request: NextRequest) {
     // No fixtures in DB - return empty array
     // User can use refresh button to fetch from API if needed
     console.log(`No fixtures in DB for ${round.targetDate} ${round.kickoffTime}. Use refresh button to fetch.`);
-    return NextResponse.json({ week, fixtures: [], message: 'No fixtures loaded yet. Click refresh to fetch from SofaScore.' });
+    return NextResponse.json({ week, fixtures: [], message: 'No fixtures loaded yet. Click refresh to run the hybrid BSD/SofaScore sync.' });
   } catch (err: any) {
     console.error('Fixtures API error:', err);
     const message = String(err?.message || '');
@@ -284,6 +284,9 @@ export async function POST(request: NextRequest) {
 
     const fixtureRows = apiFixtures.map((f) => ({
       api_fixture_id: f.fixture.id,
+      data_provider: 'sofascore',
+      provider_fixture_id: f.fixture.id,
+      bsd_event_id: null,
       week_id: week.id,
       home_team: f.teams.home.name,
       away_team: f.teams.away.name,
@@ -301,7 +304,7 @@ export async function POST(request: NextRequest) {
 
     const { data: fixtures, error } = await supabase
       .from('fixtures')
-      .upsert(fixtureRows, { onConflict: 'api_fixture_id' })
+      .upsert(fixtureRows, { onConflict: 'data_provider,provider_fixture_id' })
       .select();
 
     if (error) {

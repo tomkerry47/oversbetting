@@ -12,7 +12,7 @@ type RoundQuery =
   | { mode: 'custom'; targetDate: string; kickoffTime: string }
   | { mode: 'existing'; weekId: number };
 
-const MANUAL_TRIGGER_ENRICH = true;
+const MANUAL_TRIGGER_ENRICH = false;
 const MANUAL_TRIGGER_ENRICH_ODDS = false;
 
 async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {

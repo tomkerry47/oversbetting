@@ -31,7 +31,10 @@ CREATE INDEX idx_weeks_saturday_date ON weeks(saturday_date);
 -- ============================================================
 CREATE TABLE fixtures (
   id              SERIAL PRIMARY KEY,
-  api_fixture_id  INT UNIQUE NOT NULL,
+  api_fixture_id  BIGINT NOT NULL,
+  data_provider   TEXT NOT NULL DEFAULT 'sofascore',
+  provider_fixture_id BIGINT NOT NULL,
+  bsd_event_id    BIGINT,
   week_id         INT NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
   home_team       TEXT NOT NULL,
   away_team       TEXT NOT NULL,
@@ -45,6 +48,10 @@ CREATE TABLE fixtures (
   home_score      INT,
   away_score      INT,
   match_status    TEXT NOT NULL DEFAULT 'NS',
+  over_25_prediction DOUBLE PRECISION,
+  bsd_live_websocket BOOLEAN NOT NULL DEFAULT FALSE,
+  bsd_websocket_plus BOOLEAN NOT NULL DEFAULT FALSE,
+  live_updated_at TIMESTAMPTZ,
   is_star_pick    BOOLEAN NOT NULL DEFAULT FALSE,
   star_rank       INT,
   star_score      DOUBLE PRECISION,
@@ -54,6 +61,8 @@ CREATE TABLE fixtures (
 CREATE INDEX idx_fixtures_week ON fixtures(week_id);
 CREATE INDEX idx_fixtures_api_id ON fixtures(api_fixture_id);
 CREATE INDEX idx_fixtures_week_star_pick ON fixtures(week_id, is_star_pick);
+CREATE UNIQUE INDEX fixtures_provider_fixture_unique ON fixtures(data_provider, provider_fixture_id);
+CREATE UNIQUE INDEX fixtures_bsd_event_unique ON fixtures(bsd_event_id) WHERE bsd_event_id IS NOT NULL;
 
 -- ============================================================
 -- SELECTIONS: Each player's 2 picks per week

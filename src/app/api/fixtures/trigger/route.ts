@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { calculateWeekNumber, getRelevantSaturday, getSaturdayForTargetDate } from '@/lib/utils';
-import { getCurrentSeason } from '@/lib/football-api';
 
 type DispatchBody = {
   ref: string;
@@ -35,46 +32,6 @@ async function findLatestWorkflowRun(
   return runs[0]?.id ?? null;
 }
 
-async function findExistingWeekWithFixtures({
-  weekOffset,
-  targetDate,
-  isCustom,
-}: {
-  weekOffset: string;
-  targetDate?: string;
-  isCustom: string;
-}) {
-  const custom = isCustom === 'true';
-  const saturdayDate = targetDate && custom
-    ? getSaturdayForTargetDate(targetDate)
-    : getRelevantSaturday(Number(weekOffset));
-  const weekNumber = calculateWeekNumber(saturdayDate);
-  const season = getCurrentSeason(saturdayDate);
-
-  const { data: week } = await supabase
-    .from('weeks')
-    .select('id')
-    .eq('season', season)
-    .eq('week_number', weekNumber)
-    .eq('is_custom', custom)
-    .maybeSingle();
-
-  if (!week?.id) {
-    return null;
-  }
-
-  const { count } = await supabase
-    .from('fixtures')
-    .select('id', { count: 'exact', head: true })
-    .eq('week_id', week.id);
-
-  if ((count || 0) === 0) {
-    return null;
-  }
-
-  return { weekId: week.id, fixtureCount: count || 0 };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { weekOffset, targetDate, kickoffTime, isCustom, enrich, enrichOdds } = await request.json().catch(() => ({ weekOffset: 1 }));
@@ -84,32 +41,13 @@ export async function POST(request: NextRequest) {
     const hasExplicitTarget = Boolean(targetDate && kickoffTime);
     const workflowIsCustom =
       typeof isCustom === 'boolean' ? String(isCustom) : hasExplicitTarget ? 'true' : 'false';
-    const workflowEnrich = typeof enrich === 'boolean' ? String(enrich) : 'true';
+    const workflowEnrich = typeof enrich === 'boolean' ? String(enrich) : 'false';
     const workflowEnrichOdds = typeof enrichOdds === 'boolean' ? String(enrichOdds) : 'false';
-    const workflowRequestBudget = '100';
+    const workflowRequestBudget = '10';
 
-    const existing = await findExistingWeekWithFixtures({
-      weekOffset: workflowWeekOffset,
-      targetDate: hasExplicitTarget ? String(targetDate) : undefined,
-      isCustom: workflowIsCustom,
-    });
-    if (existing) {
-      return NextResponse.json({
-        ok: true,
-        skipped: true,
-        message: 'Fixture sync skipped because fixtures already exist for this round',
-        weekOffset: workflowWeekOffset,
-        targetDate: hasExplicitTarget ? String(targetDate) : null,
-        kickoffTime: hasExplicitTarget ? String(kickoffTime) : null,
-        isCustom: workflowIsCustom,
-        enrich: workflowEnrich,
-        enrichOdds: workflowEnrichOdds,
-        requestBudget: workflowRequestBudget,
-        weekId: existing.weekId,
-        fixtureCount: existing.fixtureCount,
-        runId: null,
-      });
-    }
+    // Always dispatch an explicit refresh. The hybrid job upserts by provider
+    // ID, so rerunning safely refreshes BSD predictions/odds without creating
+    // duplicate fixtures.
 
     const token = process.env.GITHUB_ACTIONS_TRIGGER_TOKEN;
     const owner = process.env.GITHUB_REPO_OWNER || process.env.VERCEL_GIT_REPO_OWNER;

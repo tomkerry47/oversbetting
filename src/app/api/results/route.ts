@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { GOAL_THRESHOLD } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
+import { fetchBsdMatch } from '@/lib/bsd-api';
 
 /**
  * POST /api/results - Check results for the current week's selections.
@@ -79,7 +80,9 @@ export async function POST(request: NextRequest) {
     console.log(`[Results] Found ${fixtures.length} fixtures for week ${week.id}`);
 
     // Fetch latest results from API
-    const apiFixtureIds = fixtures.map((f) => f.api_fixture_id);
+    const sofaFixtures = fixtures.filter((f) => f.data_provider !== 'bsd');
+    const bsdFixtures = fixtures.filter((f) => f.data_provider === 'bsd' && f.bsd_event_id);
+    const apiFixtureIds = sofaFixtures.map((f) => f.provider_fixture_id || f.api_fixture_id);
     console.log(`[Results] Fetching results for fixture IDs:`, apiFixtureIds);
     
     const apiResults = await fetchFixtureResults(apiFixtureIds);
@@ -100,6 +103,21 @@ export async function POST(request: NextRequest) {
       
       if (updateError) {
         console.error(`[Results] Error updating fixture ${result.fixture.id}:`, updateError);
+      }
+    }
+
+    for (const fixture of bsdFixtures) {
+      try {
+        const live = await fetchBsdMatch(fixture.bsd_event_id);
+        const rawStatus = String(live.status || '').toLowerCase().replaceAll('_', '');
+        const status = ['finished', 'ft', 'ended'].includes(rawStatus)
+          ? 'FT' : ['inprogress', 'live', 'halftime', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
+        await supabase.from('fixtures').update({
+          home_score: live.homeScore, away_score: live.awayScore,
+          match_status: status, live_updated_at: new Date().toISOString(),
+        }).eq('id', fixture.id);
+      } catch (error) {
+        console.error(`[Results] BSD fixture ${fixture.bsd_event_id} failed`, error);
       }
     }
 

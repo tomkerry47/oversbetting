@@ -39,6 +39,7 @@ API_BASES = (
 RAPIDAPI_HOST = "sofascore.p.rapidapi.com"
 RAPIDAPI_BASE = f"https://{RAPIDAPI_HOST}"
 RAPIDAPI_FOOTBALL_CATEGORY_IDS = (1, 22)  # England, Scotland
+BSD_API_BASE = "https://sports.bzzoiro.com/api/v2"
 DEFAULT_RETRIES = 3
 UK_TZ = ZoneInfo("Europe/London")
 
@@ -55,6 +56,52 @@ SOFASCORE_TOURNAMENTS: Dict[int, str] = {
     207: "Scottish League One",
     209: "Scottish League Two",
 }
+
+
+def canonical_league_name(value: str) -> str:
+    name = " ".join((value or "").lower().replace("sky bet", "").split())
+    aliases = {
+        "english premier league": "Premier League",
+        "premier league": "Premier League",
+        "efl championship": "Championship",
+        "championship": "Championship",
+        "efl league one": "League One",
+        "league one": "League One",
+        "efl league two": "League Two",
+        "league two": "League Two",
+        "national league": "National League",
+        "fa cup": "FA Cup",
+        "scottish cup": "Scottish Cup",
+        "scottish premiership": "Scottish Premiership",
+        "scottish championship": "Scottish Championship",
+        "scottish league one": "Scottish League One",
+        "scottish league two": "Scottish League Two",
+    }
+    return aliases.get(name, value)
+
+
+def bsd_token() -> str:
+    # bsd_event_id is retained temporarily for existing local environments.
+    token = os.getenv("BZZOIRO_API_TOKEN") or os.getenv("bsd_event_id")
+    if not token:
+        raise RuntimeError("BZZOIRO_API_TOKEN environment variable is not set")
+    return token
+
+
+def bsd_get(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    url = f"{BSD_API_BASE}{path}"
+    headers = {"Authorization": f"Token {bsd_token()}", "Accept": "application/json"}
+    last_error: Exception | None = None
+    for attempt in range(DEFAULT_RETRIES):
+        response = requests.get(url, headers=headers, params=params, timeout=45)
+        if response.status_code == 200:
+            return response.json()
+        last_error = RuntimeError(f"BSD API error {response.status_code} for {path}: {response.text[:300]}")
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < DEFAULT_RETRIES - 1:
+            time.sleep(1.25 * (attempt + 1))
+            continue
+        break
+    raise last_error or RuntimeError(f"BSD API request failed for {path}")
 
 STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
 RAPIDAPI_REQUEST_LIMIT: int | None = None
@@ -170,6 +217,7 @@ def set_default_insights(row: Dict[str, Any]) -> None:
     row["is_star_pick"] = False
     row["star_rank"] = None
     row["star_score"] = None
+    row["over_25_prediction"] = None
     row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
 
 
@@ -331,6 +379,11 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "1
         rows.append(
             {
                 "api_fixture_id": event.get("id"),
+                "data_provider": "sofascore",
+                "provider_fixture_id": event.get("id"),
+                "bsd_event_id": None,
+                "bsd_live_websocket": False,
+                "bsd_websocket_plus": False,
                 "home_team": home.get("name", ""),
                 "away_team": away.get("name", ""),
                 "home_team_id": home.get("id"),
@@ -352,6 +405,147 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "1
         )
 
     return rows
+
+
+def _list_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows = payload.get("results") or payload.get("events") or payload.get("data") or []
+    return rows if isinstance(rows, list) else []
+
+
+def fetch_bsd_supported_leagues() -> Dict[str, int]:
+    supported: Dict[str, int] = {}
+    offset = 0
+    while True:
+        payload = bsd_get("/leagues/", {"limit": 100, "offset": offset})
+        rows = _list_payload(payload)
+        for league in rows:
+            canonical = canonical_league_name(str(league.get("name") or league.get("league_name") or ""))
+            if canonical in SOFASCORE_TOURNAMENTS.values() and league.get("id") is not None:
+                supported[canonical] = int(league["id"])
+        if not payload.get("next") or not rows:
+            break
+        offset += len(rows)
+    return supported
+
+
+def _bsd_status(value: Any) -> str:
+    status = str(value or "notstarted").lower().replace("_", "")
+    if status in {"finished", "ft", "ended"}:
+        return "FT"
+    if status in {"inprogress", "live", "halftime", "paused"}:
+        return "LIVE"
+    if status in {"postponed", "cancelled", "canceled"}:
+        return "PST"
+    return "NS"
+
+
+def fetch_bsd_fixtures(date_iso: str, kickoff_time: str, supported: Dict[str, int]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    target_kickoff = normalize_kickoff_time(kickoff_time)[:5]
+    events: List[Dict[str, Any]] = []
+    for league_id in supported.values():
+        offset = 0
+        while True:
+            payload = bsd_get("/events/", {
+                "date_from": date_iso, "date_to": date_iso, "league_id": league_id,
+                "limit": 100, "offset": offset,
+            })
+            page = _list_payload(payload)
+            events.extend(page)
+            if not payload.get("next") or not page:
+                break
+            offset += len(page)
+    for event in events:
+        league_id = event.get("league_id") or (event.get("league") or {}).get("id")
+        if league_id is None:
+            continue
+        raw_date = event.get("event_date") or event.get("start_time") or event.get("kickoff")
+        if not raw_date:
+            continue
+        kickoff_utc = dt.datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+        if kickoff_utc.tzinfo is None:
+            kickoff_utc = kickoff_utc.replace(tzinfo=dt.timezone.utc)
+        if kickoff_utc.astimezone(UK_TZ).strftime("%H:%M") != target_kickoff:
+            continue
+        home = event.get("home_team")
+        away = event.get("away_team")
+        home_obj = home if isinstance(home, dict) else {}
+        away_obj = away if isinstance(away, dict) else {}
+        league_name = next((name for name, lid in supported.items() if lid == int(league_id)), str(event.get("league_name") or "Unknown"))
+        event_id = int(event["id"])
+        row = {
+            "api_fixture_id": event_id,
+            "data_provider": "bsd",
+            "provider_fixture_id": event_id,
+            "bsd_event_id": event_id,
+            "home_team": home_obj.get("name") or home or event.get("home_team_name") or "",
+            "away_team": away_obj.get("name") or away or event.get("away_team_name") or "",
+            "home_team_id": home_obj.get("id") or event.get("home_team_id"),
+            "away_team_id": away_obj.get("id") or event.get("away_team_id"),
+            "home_team_logo": home_obj.get("logo") or event.get("home_team_logo"),
+            "away_team_logo": away_obj.get("logo") or event.get("away_team_logo"),
+            "league_id": int(league_id),
+            "league_name": league_name,
+            "kick_off": kickoff_utc.astimezone(dt.timezone.utc).isoformat(),
+            "home_score": event.get("home_score"),
+            "away_score": event.get("away_score"),
+            "match_status": _bsd_status(event.get("status")),
+            "bsd_live_websocket": bool(event.get("live_websocket")),
+            "bsd_websocket_plus": bool(event.get("websocket_plus")),
+        }
+        set_default_insights(row)
+        rows.append(row)
+    return rows
+
+
+def _find_number(node: Any, wanted: set[str]) -> float | None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            normalized = str(key).lower().replace("-", "_").replace(".", "_")
+            if normalized in wanted and isinstance(value, (int, float, str)):
+                try:
+                    return float(value)
+                except ValueError:
+                    pass
+        for value in node.values():
+            found = _find_number(value, wanted)
+            if found is not None:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = _find_number(value, wanted)
+            if found is not None:
+                return found
+    return None
+
+
+def enrich_bsd_fixtures(rows: List[Dict[str, Any]]) -> None:
+    for row in rows:
+        event_id = int(row["bsd_event_id"])
+        try:
+            prediction = bsd_get(f"/events/{event_id}/prediction/")
+            probability = _find_number(prediction, {"prob_over_25", "over_25_probability"})
+            row["over_25_prediction"] = probability
+            row["star_score"] = probability
+        except Exception as exc:
+            print(f"BSD prediction unavailable for {event_id}: {exc}", file=sys.stderr)
+        try:
+            odds = bsd_get("/odds/", {"event_id": event_id, "market": "over_under_25", "limit": 100})
+            odds_rows = _list_payload(odds)
+            consensus = [item for item in odds_rows if item.get("bookmaker_slug") == "consensus"] or odds_rows
+            over = next((item.get("decimal_odds") for item in consensus if str(item.get("outcome")).lower() == "over"), None)
+            under = next((item.get("decimal_odds") for item in consensus if str(item.get("outcome")).lower() == "under"), None)
+            row["odds_over_25"] = float(over) if over is not None else None
+            row["odds_under_25"] = float(under) if under is not None else None
+        except Exception as exc:
+            print(f"BSD odds unavailable for {event_id}: {exc}", file=sys.stderr)
+        row["insights_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+
+    ranked = [row for row in rows if isinstance(row.get("over_25_prediction"), (int, float))]
+    ranked.sort(key=lambda row: (row["over_25_prediction"], -int(row["bsd_event_id"])), reverse=True)
+    for rank, row in enumerate(ranked[:5], 1):
+        row["is_star_pick"] = True
+        row["star_rank"] = rank
 
 
 def winner_for_team(event: Dict[str, Any], team_id: int) -> str:
@@ -867,7 +1061,7 @@ class SupabaseRest:
         if not rows:
             return
         headers = {"Prefer": "resolution=merge-duplicates,return=minimal"}
-        url = f"{self.base_url}/rest/v1/fixtures?on_conflict=api_fixture_id"
+        url = f"{self.base_url}/rest/v1/fixtures?on_conflict=data_provider,provider_fixture_id"
         res = self.session.post(url, data=json.dumps(rows), headers=headers, timeout=120)
         if res.status_code >= 300:
             raise RuntimeError(f"Failed to upsert fixtures: {res.status_code} {res.text[:300]}")
@@ -918,43 +1112,31 @@ def main() -> int:
     )
 
     supabase = SupabaseRest(supabase_url, service_role)
-    skip, existing_week, existing_status = supabase.should_skip_existing_round(
-        season=season,
-        week_number=week_number,
-        is_custom=is_custom,
-        require_enrichment=enrich,
-        require_odds=enrich_odds,
+    supported_bsd = fetch_bsd_supported_leagues()
+    print(
+        "BSD currently supports tracked leagues: "
+        + (", ".join(sorted(supported_bsd)) if supported_bsd else "none")
     )
-    if skip:
-        print(
-            f"Skipping fixture fetch for week {existing_week['week_number']}"
-            f"{'.5' if existing_week.get('is_custom') else ''}: existing fixtures already satisfy "
-            f"requested enrichment. Status: {existing_status}"
-        )
-        supabase.update_week_request_usage(
-            week_id=int(existing_week["id"]),
-            request_budget=request_budget if use_rapidapi() else None,
-            requests_used=0,
-        )
-        return 0
+    bsd_rows = fetch_bsd_fixtures(target_date, target_kickoff_time, supported_bsd)
+    enrich_bsd_fixtures(bsd_rows)
 
     tls_session_factory = get_tls_session()
     with tls_session_factory as tls_session:
         sofa_payload = fetch_scheduled_events(tls_session, target_date)
-        fixture_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
-        print(f"Found {len(fixture_rows)} matching fixtures")
+        sofa_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
+        # The catalogue is checked on every run. As BSD adds a tracked league,
+        # its SofaScore fixtures disappear from this fallback automatically.
+        sofa_rows = [row for row in sofa_rows if row["league_name"] not in supported_bsd]
+        for row in sofa_rows:
+            set_default_insights(row)
+        fixture_rows = bsd_rows + sofa_rows
+        print(f"Found {len(bsd_rows)} BSD + {len(sofa_rows)} SofaScore fallback fixtures")
 
         if not fixture_rows:
             return 0
 
-        if enrich:
-            apply_bulk_enrichment(tls_session, fixture_rows, enrich_odds)
-        else:
-            for row in fixture_rows:
-                set_default_insights(row)
-
     star_rows = [row for row in fixture_rows if row.get("is_star_pick")]
-    print(f"Calculated star picks: {len(star_rows)} / {len(fixture_rows)} fixtures")
+    print(f"BSD prediction star picks: {len(star_rows)} / {len(bsd_rows)} BSD fixtures")
 
     week = supabase.upsert_week(
         saturday_date=saturday_date,
