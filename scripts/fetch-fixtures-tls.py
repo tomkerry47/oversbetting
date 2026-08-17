@@ -105,6 +105,7 @@ def bsd_get(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
 
 STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
 BSD_FORM_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+BSD_STANDINGS_CACHE: Dict[str, Dict[int, int]] = {}
 RAPIDAPI_REQUEST_LIMIT: int | None = None
 RAPIDAPI_REQUESTS_USED = 0
 
@@ -493,6 +494,7 @@ def fetch_bsd_fixtures(date_iso: str, kickoff_time: str, supported: Dict[str, in
             "match_status": _bsd_status(event.get("status")),
             "bsd_live_websocket": bool(event.get("live_websocket")),
             "bsd_websocket_plus": bool(event.get("websocket_plus")),
+            "_season_id": event.get("season_id"),
         }
         set_default_insights(row)
         rows.append(row)
@@ -576,10 +578,35 @@ def fetch_bsd_team_form(
     return form
 
 
+def fetch_bsd_positions(league_id: int, season_id: int | None) -> Dict[int, int]:
+    if not season_id:
+        return {}
+    cache_key = f"{league_id}:{season_id}"
+    if cache_key in BSD_STANDINGS_CACHE:
+        return BSD_STANDINGS_CACHE[cache_key]
+    payload = bsd_get(f"/leagues/{league_id}/standings/", {"season_id": season_id})
+    standings = payload.get("standings") or payload.get("results") or []
+    positions: Dict[int, int] = {}
+    for item in standings if isinstance(standings, list) else []:
+        team = item.get("team") if isinstance(item.get("team"), dict) else {}
+        team_id = item.get("team_id") or team.get("id")
+        position = item.get("position") or item.get("rank")
+        if team_id is not None and position is not None:
+            positions[int(team_id)] = int(position)
+    BSD_STANDINGS_CACHE[cache_key] = positions
+    return positions
+
+
 def enrich_bsd_fixtures(rows: List[Dict[str, Any]]) -> None:
     for row in rows:
         event_id = int(row["bsd_event_id"])
         fixture_date = str(row.get("kick_off") or "")[:10]
+        try:
+            positions = fetch_bsd_positions(int(row["league_id"]), row.get("_season_id"))
+            row["home_team_position"] = positions.get(int(row["home_team_id"])) if row.get("home_team_id") else None
+            row["away_team_position"] = positions.get(int(row["away_team_id"])) if row.get("away_team_id") else None
+        except Exception as exc:
+            print(f"BSD standings unavailable for league {row['league_id']}: {exc}", file=sys.stderr)
         for side in ("home", "away"):
             team_id = row.get(f"{side}_team_id")
             if not team_id:
