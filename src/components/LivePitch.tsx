@@ -28,10 +28,37 @@ function pointOf(item: any): PitchPoint | null {
 function actionText(item: any) {
   if (!item) return 'Waiting for the next event';
   const minute = item.minute ?? item.min ?? item.time?.minute;
-  const rawAction = item.commentary || item.description || item.text || item.action_type || item.action || item.situation || item.event || item.type || 'Live update';
-  const action = rawAction === 'temp_goal' ? 'Goal — checking' : rawAction === 'temp_save' ? 'Save — checking' : rawAction;
   const player = item.player?.name || item.player_name || (typeof item.player === 'string' ? item.player : null);
-  return `${minute != null ? `${minute}′ · ` : ''}${String(action).replaceAll('_', ' ')}${player ? ` · ${player}` : ''}`;
+  const rawAction = String(item.action_type || item.action || item.event || item.situation || item.type || 'live_update').toLowerCase();
+  const descriptions: Record<string, string> = {
+    pass: player ? `${player} passes` : 'Pass',
+    goal: player ? `Goal · ${player}` : 'Goal',
+    temp_goal: player ? `Possible goal · ${player}` : 'Goal — checking',
+    attempt_saved: player ? `${player}'s shot is saved` : 'Shot saved',
+    temp_save: player ? `${player}'s shot is being checked` : 'Save — checking',
+    save: player ? `${player}'s shot is saved` : 'Shot saved',
+    post: player ? `${player} hits the woodwork` : 'Shot hits the woodwork',
+    miss: player ? `${player} shoots wide` : 'Shot off target',
+    block: player ? `${player}'s shot is blocked` : 'Shot blocked',
+    foul: player ? `${player} commits a foul` : 'Foul',
+    card: player ? `Card · ${player}` : 'Card shown',
+    corner_awarded: player ? `Corner won by ${player}` : 'Corner awarded',
+    offside_pass: player ? `${player} is caught offside` : 'Offside',
+    out: player ? `Ball out · ${player}` : 'Ball out of play',
+    tackle: player ? `${player} makes a tackle` : 'Tackle',
+    interception: player ? `${player} intercepts` : 'Interception',
+    clearance: player ? `${player} clears` : 'Clearance',
+    player_on: player ? `${player} comes on` : 'Substitution',
+    player_off: player ? `${player} goes off` : 'Substitution',
+  };
+  const detailed = descriptions[rawAction];
+  const summary = item.commentary || item.description || item.text || detailed || `${player ? `${player} · ` : ''}${rawAction.replaceAll('_', ' ')}`;
+  return `${minute != null ? `${minute}′ · ` : ''}${detailed || summary}`;
+}
+
+function isDetailedAction(item: any) {
+  const type = String(item.action_type || item.action || '').toLowerCase();
+  return ['action', 'poem'].includes(item.type) && Boolean(teamOf(item)) && !type.startsWith('unknown_') && type !== 'injury_time_announcement';
 }
 
 function eventKey(item: any) {
@@ -120,7 +147,13 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent }: { detail:
   }, [streamUrl]);
 
   const detailActions = Array.isArray(detail?.actions) ? detail.actions : [];
-  const sourceItems = useMemo(() => reconcile(streamItems.length > 0 ? streamItems : detailActions.length > 0 ? detailActions : (detail?.shotmap || [])), [streamItems, detailActions, detail?.shotmap]);
+  const sourceItems = useMemo(() => {
+    const reconciled = reconcile(streamItems.length > 0 ? streamItems : detailActions.length > 0 ? detailActions : (detail?.shotmap || []));
+    const detailed = reconciled.filter(isDetailedAction);
+    const basic = reconciled.filter((item: any) => item.type === 'livedata');
+    if (feedSource === 'basic') return basic.length > 0 ? basic : reconciled;
+    return detailed.length > 0 ? detailed : basic.length > 0 ? basic : reconciled;
+  }, [streamItems, detailActions, detail?.shotmap, feedSource]);
   const pitchItems = useMemo(() => sourceItems.filter((item: any) => pointOf(item)), [sourceItems]);
   const teamPitchItems = pitchItems.filter((item: any) => teamOf(item));
   const latestItem = teamPitchItems.at(-1);
