@@ -281,6 +281,11 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
   const possessionLabel = TURNOVERS[rawAction] || (possessionChanged ? 'Possession changed' : 'In possession');
   const teamLabel = latestTeam === 'away' ? awayTeam : homeTeam;
   const activePlayer = playerOf(latestItem);
+  const playerTagPosition = latestPoint ? {
+    left: `${Math.max(24, Math.min(76, latestPoint.x))}%`,
+    top: `${latestPoint.y}%`,
+    transform: latestPoint.y < 18 ? 'translate(-50%, 45%)' : 'translate(-50%, -145%)',
+  } : null;
   const isShot = ['goal', 'temp_goal', 'attempt_saved', 'temp_save', 'save', 'miss', 'post'].includes(rawAction);
   const goalMouthY = Number(latestItem?.gmy ?? latestItem?.goal_mouth_y ?? latestItem?.goalMouthY ?? 50);
   const shotTarget = latestPoint && isShot ? {
@@ -338,7 +343,7 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
         {shotTarget && latestPoint && <path className="live-shot-arc" d={`M ${latestPoint.x} ${latestPoint.y} Q ${(latestPoint.x + shotTarget.x) / 2} ${Math.max(4, Math.min(latestPoint.y, shotTarget.y) - 12)} ${shotTarget.x} ${shotTarget.y}`} fill="none" stroke="#fff" strokeWidth="1" strokeDasharray="2 1.4" opacity="0.85" filter="url(#trail-glow)" />}
       </svg>}
       {latestPoint && <>
-        {activePlayer && <div className="live-player-tag absolute z-20 flex max-w-[46%] -translate-x-1/2 -translate-y-[145%] items-center gap-1.5 rounded-full border bg-slate-950/90 py-1 pl-1 pr-2.5 text-[9px] font-bold uppercase text-white shadow-xl" style={{ left: `${latestPoint.x}%`, top: `${latestPoint.y}%`, borderColor: `${colour}99` }}>
+        {activePlayer && playerTagPosition && <div className="live-player-tag absolute z-20 flex max-w-[46%] items-center gap-1.5 rounded-full border bg-slate-950/90 py-1 pl-1 pr-2.5 text-[9px] font-bold uppercase text-white shadow-xl" style={{ ...playerTagPosition, borderColor: `${colour}99` }}>
           <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[8px] text-slate-950" style={{ backgroundColor: colour }}>{activePlayer.split(/\s+/).map((part: string) => part[0]).slice(0, 2).join('')}</span>
           <span className="truncate">{activePlayer}</span><span className="truncate font-medium text-slate-400">{rawAction.replaceAll('_', ' ')}</span>
         </div>}
