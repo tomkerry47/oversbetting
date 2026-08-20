@@ -13,6 +13,7 @@ export default function MatchCentrePage() {
   const { fixtureId } = useParams<{ fixtureId: string }>();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState('');
+  const [replayEvent, setReplayEvent] = useState<any>(null);
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/live/${fixtureId}`, { cache: 'no-store' });
@@ -37,7 +38,7 @@ export default function MatchCentrePage() {
           <div className="text-xs text-slate-400">{fixture.league_name} · {live?.minute != null ? `${live.minute}'` : fixture.match_status}</div>
           {data?.pickedBy?.length > 0 && <div className="mt-1 text-xs font-semibold text-emerald-400">Picked by {data.pickedBy.join(', ')}</div>}
           <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{fixture.home_team}</div><div className="text-4xl font-black text-white">{live?.homeScore ?? fixture.home_score ?? 0}–{live?.awayScore ?? fixture.away_score ?? 0}</div><div className="font-semibold text-white">{fixture.away_team}</div></div>
-          <LiveKeyEvents events={live?.keyEvents} />
+          <LiveKeyEvents events={live?.keyEvents} onReplay={Boolean(fixture.bsd_websocket_plus || live?.websocketPlus) ? setReplayEvent : undefined} />
           <div className="mt-4 flex justify-center gap-6 text-xs text-slate-300"><span>Shots on target {live?.homeShotsOnTarget ?? '–'}–{live?.awayShotsOnTarget ?? '–'}</span><span>{live?.xgEstimated ? 'xG est.' : 'xG'} {live?.homeXg?.toFixed?.(2) ?? '–'}–{live?.awayXg?.toFixed?.(2) ?? '–'}</span></div>
         </section>
         <LivePitch
@@ -49,6 +50,7 @@ export default function MatchCentrePage() {
           matchStatus={live?.status || fixture.match_status}
           homeTeam={fixture.home_team}
           awayTeam={fixture.away_team}
+          replayEvent={replayEvent}
         />
         <LiveStats stats={live} />
         <LiveLineups endpoint={`/api/live/${fixtureId}/lineups`} events={live?.keyEvents || []} />

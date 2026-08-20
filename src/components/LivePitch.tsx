@@ -12,6 +12,7 @@ type LivePitchProps = {
   matchStatus?: string | null;
   homeTeam?: string;
   awayTeam?: string;
+  replayEvent?: any;
 };
 
 function teamOf(item: any): string | null {
@@ -27,9 +28,12 @@ function pointOf(item: any): PitchPoint | null {
   const x = Number(rawX);
   const y = Number(rawY);
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < -5 || x > 105 || y < -5 || y > 105) return null;
-  // WS+ coordinates already use one shared pitch: home attacks toward x=100
-  // and away toward x=0. Out-of-play frames can sit just beyond the touchline.
-  return { x: Math.max(1, Math.min(99, x)), y: Math.max(2, Math.min(98, y)), item };
+  // Arena's live bridge normalizes both teams to attack left-to-right before
+  // rendering. Apply the same 180-degree rotation to raw away-team WS+ frames.
+  const isAway = teamOf(item) === 'away';
+  const pitchX = isAway ? 100 - x : x;
+  const pitchY = isAway ? 100 - y : y;
+  return { x: Math.max(1, Math.min(99, pitchX)), y: Math.max(2, Math.min(98, pitchY)), item };
 }
 
 function actionOf(item: any) {
@@ -38,6 +42,10 @@ function actionOf(item: any) {
 
 function playerOf(item: any) {
   return item?.player?.name || item?.player_name || (typeof item?.player === 'string' ? item.player : null) || item?.p || null;
+}
+
+function normalizedPlayer(value: unknown) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 const COMMENTARY: Record<string, string[]> = {
@@ -142,7 +150,7 @@ function reconcile(items: any[]) {
   return result;
 }
 
-export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, websocketPlus = false, matchStatus, homeTeam = 'Home', awayTeam = 'Away' }: LivePitchProps) {
+export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, websocketPlus = false, matchStatus, homeTeam = 'Home', awayTeam = 'Away', replayEvent }: LivePitchProps) {
   const [streamItems, setStreamItems] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
   const [feedSource, setFeedSource] = useState<string | null>(null);
@@ -150,6 +158,10 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
   const arenaKey = process.env.NEXT_PUBLIC_ARENA_EMBED_KEY;
   const arenaAvailable = Boolean(arenaKey && eventId && websocketPlus);
   const [pitchMode, setPitchMode] = useState<'arena' | 'pitch'>(arenaAvailable ? 'arena' : 'pitch');
+  const [replayFrames, setReplayFrames] = useState<any[] | null>(null);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replayError, setReplayError] = useState('');
+  const replayStarted = useRef<number | null>(null);
   const eventCallback = useRef(onMatchEvent);
   eventCallback.current = onMatchEvent;
 
@@ -175,12 +187,12 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
         if (message.type === 'snapshot') {
           const livedata = Array.isArray(message.livedata) ? message.livedata : message.livedata ? [message.livedata] : [];
           setFeedSource(message.source || null);
-          setStreamItems(reconcile([...(message.history || []), ...livedata]).slice(-300));
+          setStreamItems(reconcile([...(message.history || []), ...livedata]).slice(-1500));
           if (message.event) eventCallback.current?.(message.event);
         } else if (message.type === 'event') {
           eventCallback.current?.(message);
         } else {
-          setStreamItems((current) => reconcile([...current, message]).slice(-300));
+          setStreamItems((current) => reconcile([...current, message]).slice(-1500));
         }
       } catch { /* Ignore malformed live frames and keep the last good position. */ }
     };
@@ -195,7 +207,54 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
     if (feedSource === 'basic') return basic.length > 0 ? basic : reconciled;
     return detailed.length > 0 ? detailed : basic.length > 0 ? basic : reconciled;
   }, [streamItems, detailActions, detail?.shotmap, feedSource]);
-  const pitchItems = useMemo(() => sourceItems.filter((item: any) => pointOf(item)), [sourceItems]);
+  useEffect(() => {
+    const requestId = Number(replayEvent?.replayNonce || 0);
+    if (!requestId || replayStarted.current === requestId || sourceItems.length === 0) return;
+    replayStarted.current = requestId;
+    const positioned = sourceItems.filter((item: any) => pointOf(item));
+    const wantedPlayer = normalizedPlayer(replayEvent?.player);
+    const wantedMinute = Number(replayEvent?.minute);
+    let goalIndex = -1;
+    for (let index = positioned.length - 1; index >= 0; index--) {
+      const item = positioned[index];
+      const action = actionOf(item);
+      const minute = Number(item.minute ?? item.min ?? item.time?.minute);
+      const playerMatches = !wantedPlayer || normalizedPlayer(playerOf(item)) === wantedPlayer;
+      if (['goal', 'temp_goal'].includes(action) && minute === wantedMinute && playerMatches) { goalIndex = index; break; }
+    }
+    // Incident attribution can be corrected after the raw WS+ frame (notably
+    // own goals), so the minute is the reliable fallback when names differ.
+    if (goalIndex < 0) {
+      for (let index = positioned.length - 1; index >= 0; index--) {
+        const item = positioned[index];
+        const minute = Number(item.minute ?? item.min ?? item.time?.minute);
+        if (['goal', 'temp_goal'].includes(actionOf(item)) && minute === wantedMinute) { goalIndex = index; break; }
+      }
+    }
+    if (goalIndex < 0) {
+      setReplayFrames(null);
+      setReplayError('That goal is outside the available WS+ replay history.');
+      return;
+    }
+    setReplayError('');
+    setPitchMode('pitch');
+    setReplayFrames(positioned.slice(Math.max(0, goalIndex - 12), goalIndex + 1));
+    setReplayIndex(0);
+  }, [replayEvent?.replayNonce, replayEvent?.minute, replayEvent?.player, sourceItems]);
+
+  useEffect(() => {
+    if (!replayFrames || replayFrames.length < 2) return;
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1;
+      setReplayIndex(Math.min(index, replayFrames.length - 1));
+      if (index >= replayFrames.length - 1) window.clearInterval(timer);
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [replayFrames]);
+
+  const displayedItems = replayFrames ? replayFrames.slice(0, replayIndex + 1) : sourceItems;
+  const pitchItems = useMemo(() => displayedItems.filter((item: any) => pointOf(item)), [displayedItems]);
   const teamPitchItems = pitchItems.filter((item: any) => teamOf(item));
   const latestItem = teamPitchItems.at(-1);
   const latestPoint = pointOf(latestItem);
@@ -232,31 +291,32 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
   const arenaMode = ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'paused', 'extratime'].includes(arenaStatus) ? 'live' : 'replay';
   const arenaUrl = arenaAvailable ? `https://arena.bzzoiro.com/embed/${arenaMode}/${eventId}/?key=${encodeURIComponent(arenaKey!)}` : '';
 
-  if (arenaAvailable && pitchMode === 'arena') return <section className="card overflow-hidden">
+  if (arenaAvailable && pitchMode === 'arena') return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 shadow-lg sm:p-4">
     <div className="mb-3 flex items-center justify-between gap-2">
       <div><h2 className="text-sm font-bold text-white">Arena3D</h2><div className="text-[9px] uppercase tracking-wider text-emerald-400">WS+ {arenaMode}</div></div>
       <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-0.5 text-[10px] font-semibold">
         <button className="rounded-md bg-emerald-500 px-2.5 py-1 text-slate-950" aria-pressed="true">3D</button>
-        <button onClick={() => setPitchMode('pitch')} className="rounded-md px-2.5 py-1 text-slate-400 hover:text-white" aria-pressed="false">2D</button>
+        <button onClick={() => { setReplayFrames(null); setReplayError(''); setPitchMode('pitch'); }} className="rounded-md px-2.5 py-1 text-slate-400 hover:text-white" aria-pressed="false">2D</button>
       </div>
     </div>
-    <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+    <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 sm:aspect-[16/10]">
       <iframe src={arenaUrl} title={`Arena3D ${homeTeam} vs ${awayTeam}`} className="absolute inset-0 h-full w-full border-0" allow="fullscreen" allowFullScreen loading="eager" referrerPolicy="strict-origin-when-cross-origin" />
     </div>
   </section>;
 
-  return <section className="card overflow-hidden">
+  return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 shadow-lg sm:p-4">
     <div className="mb-3 flex items-center justify-between gap-2">
       <h2 className="text-sm font-bold text-white">Live pitch</h2>
       <div className="flex items-center gap-2">
-        {arenaAvailable && <button onClick={() => setPitchMode('arena')} className="rounded-md border border-emerald-600/50 bg-emerald-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">View 3D</button>}
+        {replayFrames && <button onClick={() => { setReplayFrames(null); setReplayError(''); }} className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-amber-300">Return live</button>}
+        {arenaAvailable && <button onClick={() => { setReplayFrames(null); setReplayError(''); setPitchMode('arena'); }} className="rounded-md border border-emerald-600/50 bg-emerald-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300">View 3D</button>}
         <span className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider ${feedError ? 'text-red-300' : connected ? 'text-emerald-300' : 'text-slate-500'}`}><i className={`h-2 w-2 rounded-full ${feedError ? 'bg-red-400' : connected ? 'animate-pulse bg-emerald-400' : 'bg-slate-600'}`} />{feedError ? 'Feed error' : feedSource === 'full' ? 'WS+ live' : feedSource === 'basic' ? 'Basic live' : connected ? 'Live connection' : 'Connecting'}</span>
       </div>
     </div>
     <div className="live-pitch relative aspect-[1.55] overflow-hidden rounded-xl border border-emerald-300/50 shadow-inner">
       {latestTeam && <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/80 px-2.5 py-1.5 shadow-lg backdrop-blur">
         <i className="h-2 w-2 rounded-full" style={{ backgroundColor: colour, boxShadow: `0 0 8px ${colour}` }} />
-        <span className="text-[9px] font-black uppercase tracking-wider text-white">{teamLabel}</span>
+        <span className="text-[9px] font-black uppercase tracking-wider text-white">{replayFrames ? 'Goal replay' : teamLabel}</span>
         <span className={`text-[9px] font-semibold ${possessionChanged || TURNOVERS[rawAction] ? 'text-amber-300' : 'text-slate-400'}`}>{possessionLabel}</span>
       </div>}
       <div className="absolute inset-[2.5%] border border-white/75" />
@@ -288,10 +348,11 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
     </div>
     <div key={actionText(latestItem, homeTeam, awayTeam)} className="live-event-enter mt-3 rounded-xl border bg-slate-950/90 px-3 py-3 shadow-lg" style={{ borderColor: `${colour}70` }}>
       <div className="flex items-center gap-2"><i className="h-6 w-1 rounded-full" style={{ backgroundColor: colour }} /><div>
-        <div className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: colour }}>Live commentary · {teamLabel}</div>
+        <div className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: colour }}>{replayFrames ? 'Goal replay' : 'Live commentary'} · {teamLabel}</div>
         <div className="mt-0.5 text-sm font-bold text-white">{actionText(latestItem, homeTeam, awayTeam)}</div>
       </div></div>
     </div>
+    {replayError && <div className="mt-2 rounded-lg border border-amber-700/60 bg-amber-950/30 p-2 text-xs text-amber-200">{replayError}</div>}
     {feedError && <div className="mt-2 text-xs text-red-300">{feedError}</div>}
   </section>;
 }

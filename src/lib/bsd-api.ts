@@ -198,7 +198,7 @@ export function fetchBsdSocketSnapshot(eventId: number): Promise<{ actions: any[
       if (finishTimer) clearTimeout(finishTimer);
       socket.close();
       if (error && actions.length === 0 && !event) reject(error);
-      else resolve({ actions: actions.slice(-300), event });
+      else resolve({ actions: actions.slice(-1500), event });
     }
     socket.on('open', () => socket.send(JSON.stringify({ action: 'subscribe', event_id: eventId })));
     socket.on('message', (raw) => {

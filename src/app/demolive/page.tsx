@@ -25,18 +25,20 @@ type DemoAlert = { id: string; matchId: number; title: string; detail: string };
 
 function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; detail: any; onClose: () => void; onMatchEvent: (event: any) => void }) {
   const stats = detail || match.stats || {};
+  const [replayEvent, setReplayEvent] = useState<any>(null);
+  const replayAvailable = Boolean(match.websocketPlus || detail?.websocketPlus);
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950/80 p-2 backdrop-blur-sm sm:p-5" onMouseDown={onClose}>
-      <div className="mx-auto flex max-h-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] bg-slate-950/90 p-0 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
+      <div className="mx-auto flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden border-slate-600 bg-slate-900 shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:border" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
           <div><div className="text-[10px] uppercase tracking-widest text-red-400">BSD live preview</div><div className="text-sm font-bold text-white">{match.homeTeam} vs {match.awayTeam}</div></div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-800 text-xl text-slate-300 hover:bg-slate-700" aria-label="Close match">×</button>
         </div>
-        <div className="space-y-4 overflow-y-auto p-4">
-          <section className="card text-center">
+        <div className="space-y-3 overflow-y-auto p-2 sm:space-y-4 sm:p-4">
+          <section className="rounded-xl border border-slate-700 bg-slate-800/80 p-3 text-center shadow-lg sm:p-4">
             <div className="text-xs text-slate-400">{match.league} · {detail?.minute ?? match.minute ?? '–'}&apos;</div>
             <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{match.homeTeam}</div><div className="text-4xl font-black text-white">{detail?.homeScore ?? match.homeScore ?? 0}–{detail?.awayScore ?? match.awayScore ?? 0}</div><div className="font-semibold text-white">{match.awayTeam}</div></div>
-            <LiveKeyEvents events={detail?.keyEvents} />
+            <LiveKeyEvents events={detail?.keyEvents} onReplay={replayAvailable ? setReplayEvent : undefined} />
           </section>
           <LivePitch
             detail={detail}
@@ -47,6 +49,7 @@ function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; de
             matchStatus={detail?.status || match.status}
             homeTeam={match.homeTeam}
             awayTeam={match.awayTeam}
+            replayEvent={replayEvent}
           />
           <LiveStats stats={stats} />
           <LiveLineups endpoint={`/api/demolive/${match.id}/lineups`} events={detail?.keyEvents || []} />
@@ -140,7 +143,7 @@ export default function DemoLivePage() {
           ))}
         </div>
       </section>
-      {selected && <MatchModal match={selected} detail={detail} onMatchEvent={(event) => setDetail((current: any) => mergeBsdLiveEvent(current, event))} onClose={() => { setSelectedId(null); setDetail(null); }} />}
+      {selected && <MatchModal key={selected.id} match={selected} detail={detail} onMatchEvent={(event) => setDetail((current: any) => mergeBsdLiveEvent(current, event))} onClose={() => { setSelectedId(null); setDetail(null); }} />}
     </main>
   );
 }
