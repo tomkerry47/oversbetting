@@ -132,6 +132,8 @@ export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPa
   const awayStats = stats?.away || stats?.away_team || {};
   const incidents = incidentsPayload?.incidents || incidentsPayload?.results || incidentsPayload?.data || [];
   return {
+    liveWebsocket: Boolean(event.live_websocket),
+    websocketPlus: Boolean(event.websocket_plus),
     homeScore: numberAt(event, [['home_score'], ['score', 'home'], ['scores', 'home']]),
     awayScore: numberAt(event, [['away_score'], ['score', 'away'], ['scores', 'away']]),
     status: event.status || event.match_status || event.time?.status || 'notstarted',

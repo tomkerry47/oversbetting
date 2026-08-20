@@ -11,6 +11,8 @@ export function mergeBsdLiveEvent(current: any, payload: any) {
   const choose = (next: any, previous: any) => next !== null && next !== undefined ? next : previous;
   return {
     ...(current || {}),
+    liveWebsocket: choose(event.live_websocket, current?.liveWebsocket),
+    websocketPlus: choose(event.websocket_plus, current?.websocketPlus),
     homeScore: choose(numberValue(event.score?.home ?? event.home_score), current?.homeScore),
     awayScore: choose(numberValue(event.score?.away ?? event.away_score), current?.awayScore),
     minute: choose(numberValue(event.time?.minute ?? event.minute), current?.minute),
