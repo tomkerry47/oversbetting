@@ -1318,7 +1318,17 @@ def main() -> int:
             sofa_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
             # The catalogue is checked on every run. As BSD adds a tracked league,
             # its SofaScore fixtures disappear from this fallback automatically.
-            sofa_rows = [row for row in sofa_rows if row["league_name"] not in supported_bsd]
+            # Only switch a league when BSD also supplies fixtures at the requested
+            # kickoff, otherwise a newly listed or temporarily incomplete feed could
+            # remove the league from both sources.
+            bsd_leagues_with_fixtures = {row["league_name"] for row in bsd_rows}
+            pending_bsd_leagues = set(supported_bsd) - bsd_leagues_with_fixtures
+            if pending_bsd_leagues:
+                print(
+                    "BSD-listed leagues retaining SofaScore fallback (no matching fixtures): "
+                    + ", ".join(sorted(pending_bsd_leagues))
+                )
+            sofa_rows = [row for row in sofa_rows if row["league_name"] not in bsd_leagues_with_fixtures]
             if sofa_rows:
                 # Fallback leagues still need their recent form and positions. This
                 # uses league-level calls only; odds and old SofaScore star ranking
