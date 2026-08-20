@@ -299,7 +299,7 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
         <button onClick={() => { setReplayFrames(null); setReplayError(''); setPitchMode('pitch'); }} className="rounded-md px-2.5 py-1 text-slate-400 hover:text-white" aria-pressed="false">2D</button>
       </div>
     </div>
-    <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 sm:aspect-[16/10]">
+    <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-700 bg-slate-950 sm:aspect-[4/3] xl:aspect-[16/10]">
       <iframe src={arenaUrl} title={`Arena3D ${homeTeam} vs ${awayTeam}`} className="absolute inset-0 h-full w-full border-0" allow="fullscreen" allowFullScreen loading="eager" referrerPolicy="strict-origin-when-cross-origin" />
     </div>
   </section>;
