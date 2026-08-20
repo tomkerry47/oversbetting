@@ -306,6 +306,12 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
     </div>
     <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 sm:aspect-square md:aspect-[4/3] xl:aspect-[16/10]">
       <iframe src={arenaUrl} title={`Arena3D ${homeTeam} vs ${awayTeam}`} className="absolute inset-0 h-full w-full border-0" allow="fullscreen" allowFullScreen loading="eager" referrerPolicy="strict-origin-when-cross-origin" />
+      <div className="pointer-events-none absolute left-1/2 top-2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-500/40 bg-slate-950/95 px-3 py-1.5 shadow-xl backdrop-blur sm:hidden" aria-label={`${homeTeam} ${detail?.homeScore ?? 0}, ${awayTeam} ${detail?.awayScore ?? 0}`}>
+        <span className="text-lg font-black tabular-nums text-white">{detail?.homeScore ?? 0}</span>
+        <span className="text-sm text-slate-500">–</span>
+        <span className="text-lg font-black tabular-nums text-white">{detail?.awayScore ?? 0}</span>
+        {detail?.minute != null && <span className="border-l border-slate-700 pl-2 text-[10px] font-bold text-emerald-300">{detail.minute}′</span>}
+      </div>
     </div>
   </section>;
 
