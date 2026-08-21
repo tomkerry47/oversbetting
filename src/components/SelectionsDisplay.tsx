@@ -182,7 +182,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
 
       {activeSelection?.fixture && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto overscroll-contain bg-slate-950/80 p-2 backdrop-blur-sm touch-pan-y sm:items-center sm:p-4"
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/80 p-2 backdrop-blur-sm touch-pan-y sm:items-center sm:p-4"
           onClick={() => setActiveSelection(null)}
           role="presentation"
         >
