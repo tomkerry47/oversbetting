@@ -4,6 +4,7 @@ import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS } from '@/types';
 import { formatSelectionsForCopy } from '@/lib/utils';
 import { FixtureDetails, FixtureInsights } from '@/components/FixtureSelector';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface SelectionsDisplayProps {
   selections: Selection[];
@@ -20,10 +21,8 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setActiveSelection(null);
     };
-    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = '';
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [activeSelection]);
@@ -181,14 +180,14 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
         {waitingPlayers.map((player) => <span key={player} className="rounded-full border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[10px] font-semibold text-slate-400">{player}</span>)}
       </div>}
 
-      {activeSelection?.fixture && (
+      {activeSelection?.fixture && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/80 p-2 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto overscroll-contain bg-slate-950/80 p-2 backdrop-blur-sm touch-pan-y sm:items-center sm:p-4"
           onClick={() => setActiveSelection(null)}
           role="presentation"
         >
           <section
-            className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl"
+            className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl sm:max-h-[88dvh]"
             role="dialog"
             aria-modal="true"
             aria-label={`${activeSelection.fixture.home_team} versus ${activeSelection.fixture.away_team} analysis`}
@@ -213,7 +212,8 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
                 : <div className="py-12 text-center text-sm text-slate-400">Match analysis is not available yet.</div>}
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );
