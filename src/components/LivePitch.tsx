@@ -296,21 +296,21 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
   const arenaMode = ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'paused', 'extratime'].includes(arenaStatus) ? 'live' : 'replay';
   const arenaUrl = arenaAvailable ? `https://arena.bzzoiro.com/embed/${arenaMode}/${eventId}/?key=${encodeURIComponent(arenaKey!)}` : '';
 
-  if (arenaAvailable && pitchMode === 'arena') return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 shadow-lg sm:p-4">
-    <div className="mb-3 flex items-center justify-between gap-2">
+  if (arenaAvailable && pitchMode === 'arena') return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-4">
+    <div className="mb-3 flex items-center justify-between gap-2 px-2 pt-2 sm:px-0 sm:pt-0">
       <div><h2 className="text-sm font-bold text-white">Arena3D</h2><div className="text-[9px] uppercase tracking-wider text-emerald-400">WS+ {arenaMode}</div></div>
       <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-0.5 text-[10px] font-semibold">
         <button className="rounded-md bg-emerald-500 px-2.5 py-1 text-slate-950" aria-pressed="true">3D</button>
         <button onClick={() => { setReplayFrames(null); setReplayError(''); setPitchMode('pitch'); }} className="rounded-md px-2.5 py-1 text-slate-400 hover:text-white" aria-pressed="false">2D</button>
       </div>
     </div>
-    <div className="relative aspect-[3/4] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 sm:aspect-square md:aspect-[4/3] xl:aspect-[16/10]">
+    <div className="relative aspect-[3/4] overflow-hidden rounded-none border-y border-slate-700 bg-slate-950 sm:aspect-square sm:rounded-xl sm:border md:aspect-[4/3] xl:aspect-[16/10]">
       <iframe src={arenaUrl} title={`Arena3D ${homeTeam} vs ${awayTeam}`} className="absolute inset-0 h-full w-full border-0" allow="fullscreen" allowFullScreen loading="eager" referrerPolicy="strict-origin-when-cross-origin" />
     </div>
   </section>;
 
-  return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 shadow-lg sm:p-4">
-    <div className="mb-3 flex items-center justify-between gap-2">
+  return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-4">
+    <div className="mb-3 flex items-center justify-between gap-2 px-2 pt-2 sm:px-0 sm:pt-0">
       <h2 className="text-sm font-bold text-white">Live pitch</h2>
       <div className="flex items-center gap-2">
         {replayFrames && <button onClick={() => { setReplayFrames(null); setReplayError(''); }} className="rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-amber-300">Return live</button>}
@@ -318,7 +318,7 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
         <span className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wider ${feedError ? 'text-red-300' : connected ? 'text-emerald-300' : 'text-slate-500'}`}><i className={`h-2 w-2 rounded-full ${feedError ? 'bg-red-400' : connected ? 'animate-pulse bg-emerald-400' : 'bg-slate-600'}`} />{feedError ? 'Feed error' : feedSource === 'full' ? 'WS+ live' : feedSource === 'basic' ? 'Basic live' : connected ? 'Live connection' : 'Connecting'}</span>
       </div>
     </div>
-    <div className="live-pitch relative aspect-[1.55] overflow-hidden rounded-xl border border-emerald-300/50 shadow-inner">
+    <div className="live-pitch relative aspect-[1.55] overflow-hidden rounded-none border-y border-emerald-300/50 shadow-inner sm:rounded-xl sm:border">
       {latestTeam && <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/80 px-2.5 py-1.5 shadow-lg backdrop-blur">
         <i className="h-2 w-2 rounded-full" style={{ backgroundColor: colour, boxShadow: `0 0 8px ${colour}` }} />
         <span className="text-[9px] font-black uppercase tracking-wider text-white">{replayFrames ? 'Goal replay' : teamLabel}</span>
