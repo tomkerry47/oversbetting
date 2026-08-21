@@ -121,7 +121,7 @@ export default function DemoLivePage() {
 
   const selected = matches.find((match) => match.id === selectedId);
   return (
-    <main className="mx-auto max-w-3xl space-y-5 px-4 py-5 pb-24">
+    <main className="mx-auto max-w-3xl space-y-5 px-0 py-5 pb-24">
       {alert && <button onClick={() => { setSelectedId(alert.matchId); setAlert(null); }} className="fixed right-3 top-3 z-[100] block w-[min(24rem,calc(100vw-1.5rem))] rounded-xl border border-emerald-500/60 bg-slate-900 p-3 text-left shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800" aria-live="polite">
         <div className="text-sm font-bold text-white">{alert.title}</div>
         <div className="mt-1 text-xs text-emerald-300">{alert.detail}</div>
