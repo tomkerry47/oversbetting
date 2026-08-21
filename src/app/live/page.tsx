@@ -105,7 +105,7 @@ export default function LivePage() {
   const percentage = Math.min(100, (Number(data.goals || 0) / 24) * 100);
 
   return (
-    <main className="max-w-2xl mx-auto px-4 py-5 pb-24 space-y-5">
+    <main className="mx-auto max-w-2xl space-y-5 px-[0.10rem] py-5 pb-24">
       <div className="fixed right-3 top-3 z-[90] w-[min(24rem,calc(100vw-1.5rem))] space-y-2" aria-live="polite">
         {alerts.map((alert) => <Link key={alert.id} href={`/live/${alert.fixtureId}`} className="block rounded-xl border border-emerald-500/60 bg-slate-900 p-3 shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800">
           <div className="text-sm font-bold text-white">{alert.title}</div>
