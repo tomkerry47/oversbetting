@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Navigation />
-        <main className="max-w-lg mx-auto px-3 py-4 pb-24">{children}</main>
+        <main className="max-w-lg mx-auto px-[0.10rem] py-4 pb-24">{children}</main>
       </body>
     </html>
   );
