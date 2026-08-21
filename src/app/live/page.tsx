@@ -9,6 +9,11 @@ function MatchCard({ row }: { row: any }) {
   const fixture = row.fixture;
   const goals = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
   const isBsd = fixture.data_provider === 'bsd';
+  const status = String(row.live?.status || fixture.match_status || '').toLowerCase().replaceAll('_', '');
+  const hasStarted = goals > 0 || [
+    'live', 'inprogress', '1sthalf', '2ndhalf', 'halftime', 'paused',
+    'extratime', 'penalties', 'finished', 'ft', 'ended',
+  ].includes(status);
   return (
     <Link href={isBsd ? `/live/${fixture.id}` : '#'} className={`block card ${isBsd ? 'active:scale-[.99]' : ''}`}>
       <div className="flex items-center justify-between gap-3">
@@ -24,7 +29,7 @@ function MatchCard({ row }: { row: any }) {
           <div className="text-sm font-semibold text-white truncate">
             {fixture.home_team} <span className="text-slate-500">v</span> {fixture.away_team}
           </div>
-          {isBsd && (
+          {isBsd && hasStarted && (
             <div className="mt-2 flex gap-3 text-[11px] text-slate-300">
               <span>Shots on target {row.live?.homeShotsOnTarget ?? '–'}–{row.live?.awayShotsOnTarget ?? '–'}</span>
               <span>xG {row.live?.homeXg?.toFixed?.(2) ?? '–'}–{row.live?.awayXg?.toFixed?.(2) ?? '–'}</span>
