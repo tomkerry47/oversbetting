@@ -110,7 +110,7 @@ export default function LivePage() {
       </div>
       <section className="card overflow-hidden">
         <div className="flex items-end justify-between">
-          <div><div className="text-xs uppercase tracking-widest text-slate-400">Goal score</div><h1 className="text-xl font-bold text-white">Live picks</h1></div>
+          <h1 className="text-xl font-bold text-white">Live picks</h1>
           <div className="text-3xl font-black text-emerald-400">{data.goals || 0}<span className="text-lg text-slate-400">/24</span></div>
         </div>
         <div className="mt-3 h-2.5 rounded-full bg-slate-700 overflow-hidden"><div className="h-full bg-emerald-400 transition-all" style={{ width: `${percentage}%` }} /></div>
