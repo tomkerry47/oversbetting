@@ -30,14 +30,14 @@ export default function MatchCentrePage() {
   const fixture = data?.fixture;
   const live = data?.live;
   return (
-    <main className="w-full max-w-none space-y-4 px-px py-5 pb-24">
-      <Link href="/live" className="text-sm text-emerald-400">← All live picks</Link>
-      {error && <div className="card text-red-300">{error}</div>}
+    <main className="w-full max-w-none space-y-1 px-px py-1 pb-24 sm:space-y-2">
+      <Link href="/live" className="inline-block px-1 py-2 text-sm text-emerald-400">← All live picks</Link>
+      {error && <div className="card !p-2 text-red-300">{error}</div>}
       {!fixture ? <div className="text-center text-slate-400 py-16">Loading match centre…</div> : <>
-        <section className="card text-center">
+        <section className="card !p-2 text-center sm:!p-3">
           <div className="text-xs text-slate-400">{fixture.league_name} · {live?.minute != null ? `${live.minute}'` : fixture.match_status}</div>
           {data?.pickedBy?.length > 0 && <div className="mt-1 text-xs font-semibold text-emerald-400">Picked by {data.pickedBy.join(', ')}</div>}
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{fixture.home_team}</div><div className="text-4xl font-black text-white">{live?.homeScore ?? fixture.home_score ?? 0}–{live?.awayScore ?? fixture.away_score ?? 0}</div><div className="font-semibold text-white">{fixture.away_team}</div></div>
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3"><div className="font-semibold text-white">{fixture.home_team}</div><div className="text-4xl font-black text-white">{live?.homeScore ?? fixture.home_score ?? 0}–{live?.awayScore ?? fixture.away_score ?? 0}</div><div className="font-semibold text-white">{fixture.away_team}</div></div>
           <LiveKeyEvents events={live?.keyEvents} onReplay={Boolean(fixture.bsd_websocket_plus || live?.websocketPlus) ? setReplayEvent : undefined} />
         </section>
         <LivePitch

@@ -101,11 +101,11 @@ export default function LiveLineups({ endpoint, events = [] }: { endpoint: strin
     return () => { active = false; };
   }, [endpoint]);
 
-  if (loading) return <section className="card text-center text-xs text-slate-500">Loading lineups…</section>;
-  if (error) return <section className="card text-center text-xs text-slate-500">{error}</section>;
-  if (!data?.lineups) return <section className="card text-center text-xs text-slate-500">Lineups have not been announced.</section>;
+  if (loading) return <section className="card !p-2 text-center text-xs text-slate-500 sm:!p-3">Loading lineups…</section>;
+  if (error) return <section className="card !p-2 text-center text-xs text-slate-500 sm:!p-3">{error}</section>;
+  if (!data?.lineups) return <section className="card !p-2 text-center text-xs text-slate-500 sm:!p-3">Lineups have not been announced.</section>;
   const predicted = data.lineup_status === 'predicted';
-  return <section className="card">
+  return <section className="card !p-2 sm:!p-3">
     <div className="mb-4 flex items-center justify-between gap-2">
       <h2 className="text-sm font-bold text-white">Lineups</h2>
       <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${predicted ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{predicted ? 'Predicted' : 'Confirmed'}</span>

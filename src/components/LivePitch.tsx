@@ -296,7 +296,7 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
   const arenaMode = ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'paused', 'extratime'].includes(arenaStatus) ? 'live' : 'replay';
   const arenaUrl = arenaAvailable ? `https://arena.bzzoiro.com/embed/${arenaMode}/${eventId}/?key=${encodeURIComponent(arenaKey!)}` : '';
 
-  if (arenaAvailable && pitchMode === 'arena') return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-4">
+  if (arenaAvailable && pitchMode === 'arena') return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-2">
     <div className="mb-3 flex items-center justify-between gap-2 px-2 pt-2 sm:px-0 sm:pt-0">
       <div><h2 className="text-sm font-bold text-white">Arena3D</h2><div className="text-[9px] uppercase tracking-wider text-emerald-400">WS+ {arenaMode}</div></div>
       <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-0.5 text-[10px] font-semibold">
@@ -309,7 +309,7 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
     </div>
   </section>;
 
-  return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-4">
+  return <section className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-0 shadow-lg sm:p-2">
     <div className="mb-3 flex items-center justify-between gap-2 px-2 pt-2 sm:px-0 sm:pt-0">
       <h2 className="text-sm font-bold text-white">Live pitch</h2>
       <div className="flex items-center gap-2">
