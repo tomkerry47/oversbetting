@@ -21,17 +21,26 @@ function shortStatus(value: unknown) {
 
 export async function GET() {
   try {
-    const { data: week, error: weekError } = await supabase
+    const { data: activeWeeks, error: weekError } = await supabase
       .from('weeks').select('*').eq('status', 'active')
-      .order('target_date', { ascending: false }).limit(1).maybeSingle();
+      .order('target_date', { ascending: false })
+      .order('target_kickoff_time', { ascending: false })
+      .order('week_number', { ascending: false })
+      .order('id', { ascending: false });
     if (weekError) throw weekError;
-    if (!week) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
+    if (!activeWeeks?.length) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
 
     const { data: selections, error } = await supabase
-      .from('selections').select('*, fixture:fixtures(*)').eq('week_id', week.id).order('created_at');
+      .from('selections').select('*, fixture:fixtures(*)')
+      .in('week_id', activeWeeks.map((candidate: any) => candidate.id))
+      .order('created_at');
     if (error) throw error;
 
-    const bsdEventIds = (selections || [])
+    const selectedWeekIds = new Set((selections || []).map((selection: any) => selection.week_id));
+    const week = activeWeeks.find((candidate: any) => selectedWeekIds.has(candidate.id)) || activeWeeks[0];
+    const weekSelections = (selections || []).filter((selection: any) => selection.week_id === week.id);
+
+    const bsdEventIds = weekSelections
       .map((selection: any) => selection.fixture)
       .filter((fixture: any) => fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off))
       .map((fixture: any) => Number(fixture.bsd_event_id));
@@ -39,7 +48,7 @@ export async function GET() {
       Array.from(new Set<number>(bsdEventIds))
     ).catch(() => ({}));
 
-    const matches = await Promise.all((selections || []).map(async (selection: any) => {
+    const matches = await Promise.all(weekSelections.map(async (selection: any) => {
       const fixture = selection.fixture;
       let live: any = null;
       if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off)) {

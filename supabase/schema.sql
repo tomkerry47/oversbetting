@@ -21,7 +21,8 @@ CREATE TABLE weeks (
   rapidapi_request_budget INT,
   rapidapi_requests_used INT NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (season, week_number, is_custom)
+  UNIQUE (season, week_number, is_custom),
+  UNIQUE (target_date, target_kickoff_time, is_custom)
 );
 
 CREATE INDEX idx_weeks_saturday_date ON weeks(saturday_date);

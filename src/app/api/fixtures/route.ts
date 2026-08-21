@@ -90,6 +90,28 @@ async function getOrCreateWeek(searchParams: URLSearchParams) {
     };
   }
 
+  // A round's date/kickoff slot is its stable identity. Reuse it even if a
+  // future numbering-rule change calculates a different display number.
+  const { data: slotWeek, error: slotError } = await supabase
+    .from('weeks')
+    .select('*')
+    .eq('target_date', round.targetDate)
+    .eq('target_kickoff_time', round.kickoffTime)
+    .eq('is_custom', round.isCustom)
+    .order('week_number', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (slotError && !isMissingWeekColumnError(slotError)) {
+    throw new Error(slotError.message);
+  }
+  if (slotWeek) {
+    const normalizedSlotWeek = normalizeWeek(slotWeek);
+    if (!normalizedSlotWeek) throw new Error('Failed to normalize existing round slot');
+    return { week: normalizedSlotWeek, round };
+  }
+
   let week;
   let weekError;
   try {

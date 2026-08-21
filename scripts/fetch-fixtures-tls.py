@@ -1156,6 +1156,27 @@ class SupabaseRest:
         data = res.json()
         return data[0] if data else None
 
+    def find_week_for_slot(
+        self,
+        target_date: str,
+        target_kickoff_time: str,
+        is_custom: bool,
+    ) -> Dict[str, Any] | None:
+        url = f"{self.base_url}/rest/v1/weeks"
+        params = {
+            "target_date": f"eq.{target_date}",
+            "target_kickoff_time": f"eq.{target_kickoff_time}",
+            "is_custom": f"eq.{str(is_custom).lower()}",
+            "select": "*",
+            "order": "week_number.desc,id.desc",
+            "limit": "1",
+        }
+        res = self.session.get(url, params=params, timeout=30)
+        if res.status_code >= 300:
+            raise RuntimeError(f"Failed to inspect existing round slot: {res.status_code} {res.text[:300]}")
+        data = res.json()
+        return data[0] if data else None
+
     def get_week_fixture_enrichment_status(self, week_id: int) -> Dict[str, Any]:
         url = f"{self.base_url}/rest/v1/fixtures"
         params = {
@@ -1232,6 +1253,27 @@ class SupabaseRest:
         target_kickoff_time: str,
         is_custom: bool,
     ) -> Dict[str, Any]:
+        slot_week = self.find_week_for_slot(target_date, target_kickoff_time, is_custom)
+        if slot_week:
+            payload = {
+                "saturday_date": saturday_date,
+                "target_date": target_date,
+                "target_kickoff_time": target_kickoff_time,
+                "status": "active",
+            }
+            url = f"{self.base_url}/rest/v1/weeks"
+            res = self.session.patch(
+                url,
+                params={"id": f"eq.{slot_week['id']}"},
+                data=json.dumps(payload),
+                headers={"Prefer": "return=representation"},
+                timeout=30,
+            )
+            if res.status_code >= 300:
+                raise RuntimeError(f"Failed to reuse existing round slot: {res.status_code} {res.text[:300]}")
+            data = res.json()
+            return data[0] if data else {**slot_week, **payload}
+
         payload = [
             {
                 "week_number": week_number,
