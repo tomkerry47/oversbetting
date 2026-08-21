@@ -22,7 +22,7 @@ export default function LiveStats({ stats }: { stats: any }) {
     stats.homeCorners, stats.awayCorners, stats.corners?.home, stats.corners?.away,
   ].some((value) => value !== null && value !== undefined));
 
-  return <section className="card !p-2 sm:!p-3">
+  return <section className="card">
     <h2 className="mb-3 text-sm font-bold text-white">Match statistics</h2>
     {!hasStats ? <p className="py-4 text-center text-sm text-slate-400">Stats will appear once the match starts.</p> : <div className="space-y-2.5">
       <StatRow label="Shots on target" home={stats.homeShotsOnTarget ?? stats.shotsOnTarget?.home} away={stats.awayShotsOnTarget ?? stats.shotsOnTarget?.away} />
