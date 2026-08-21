@@ -73,10 +73,11 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
       </div>
 
       <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4">
-        {submittedPlayers.map((player) => {
+        {submittedPlayers.map((player, playerIndex) => {
           const playerPicks = grouped[player];
+          const spansFullRow = submittedPlayers.length % 2 === 1 && playerIndex === submittedPlayers.length - 1;
           return (
-            <div key={player} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-900/45">
+            <div key={player} className={`overflow-hidden rounded-xl border border-slate-700 bg-slate-900/45 ${spansFullRow ? 'sm:col-span-2' : ''}`}>
               <div className="flex items-center justify-between border-b border-slate-700/70 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-500/15 text-xs font-black text-emerald-300">{player.charAt(0)}</span>
@@ -84,7 +85,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
                 </div>
                 <span className="text-[10px] font-semibold text-emerald-400">{playerPicks.length}/{MAX_SELECTIONS_PER_PLAYER} picks</span>
               </div>
-              <div className="divide-y divide-slate-700/60">
+              <div className={`divide-y divide-slate-700/60 ${spansFullRow ? 'sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`}>
                 {playerPicks.map((sel) => (
                   <div
                     key={sel.id}
