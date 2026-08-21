@@ -42,6 +42,7 @@ RAPIDAPI_BASE = f"https://{RAPIDAPI_HOST}"
 RAPIDAPI_FOOTBALL_CATEGORY_IDS = (1, 22)  # England, Scotland
 BSD_API_BASE = "https://sports.bzzoiro.com/api/v2"
 DEFAULT_RETRIES = 3
+BSD_RETRIES = 5
 UK_TZ = ZoneInfo("Europe/London")
 
 SOFASCORE_TOURNAMENTS: Dict[int, str] = {
@@ -93,13 +94,39 @@ def bsd_get(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
     url = f"{BSD_API_BASE}{path}"
     headers = {"Authorization": f"Token {bsd_token()}", "Accept": "application/json"}
     last_error: Exception | None = None
-    for attempt in range(DEFAULT_RETRIES):
-        response = requests.get(url, headers=headers, params=params, timeout=45)
+    for attempt in range(1, BSD_RETRIES + 1):
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=(10, 45))
+        except requests.RequestException as exc:
+            last_error = RuntimeError(f"BSD request error for {path}: {exc}")
+            if attempt == BSD_RETRIES:
+                break
+            delay = min(12.0, 2.0 ** attempt)
+            print(
+                f"BSD request failed for {path} ({exc.__class__.__name__}); "
+                f"retrying in {delay:.0f}s ({attempt}/{BSD_RETRIES})",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(delay)
+            continue
+
         if response.status_code == 200:
             return response.json()
         last_error = RuntimeError(f"BSD API error {response.status_code} for {path}: {response.text[:300]}")
-        if response.status_code in {429, 500, 502, 503, 504} and attempt < DEFAULT_RETRIES - 1:
-            time.sleep(1.25 * (attempt + 1))
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < BSD_RETRIES:
+            retry_after = response.headers.get("Retry-After")
+            try:
+                delay = max(0.0, float(retry_after)) if retry_after else min(12.0, 2.0 ** attempt)
+            except ValueError:
+                delay = min(12.0, 2.0 ** attempt)
+            print(
+                f"BSD returned HTTP {response.status_code} for {path}; "
+                f"retrying in {delay:.0f}s ({attempt}/{BSD_RETRIES})",
+                file=sys.stderr,
+                flush=True,
+            )
+            time.sleep(delay)
             continue
         break
     raise last_error or RuntimeError(f"BSD API request failed for {path}")
