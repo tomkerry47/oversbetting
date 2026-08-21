@@ -2,7 +2,8 @@
 
 import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS } from '@/types';
 import { formatSelectionsForCopy } from '@/lib/utils';
-import { useState } from 'react';
+import { FixtureDetails, FixtureInsights } from '@/components/FixtureSelector';
+import { useEffect, useState } from 'react';
 
 interface SelectionsDisplayProps {
   selections: Selection[];
@@ -10,6 +11,22 @@ interface SelectionsDisplayProps {
 
 export default function SelectionsDisplay({ selections }: SelectionsDisplayProps) {
   const [copied, setCopied] = useState(false);
+  const [activeSelection, setActiveSelection] = useState<Selection | null>(null);
+  const [details, setDetails] = useState<FixtureDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!activeSelection) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveSelection(null);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [activeSelection]);
 
   if (selections.length === 0) {
     return null;
@@ -36,6 +53,42 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
       document.body.removeChild(textarea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const openAnalysis = async (selection: Selection) => {
+    const fixture = selection.fixture;
+    if (!fixture) return;
+
+    setActiveSelection(selection);
+    setDetails(null);
+    setDetailsLoading(true);
+
+    try {
+      if (fixture.home_form && fixture.away_form) {
+        const nextDetails: FixtureDetails = {
+          homeForm: fixture.home_form,
+          awayForm: fixture.away_form,
+          odds: fixture.odds_over_25 || fixture.odds_under_25
+            ? { over: fixture.odds_over_25 || 'N/A', under: fixture.odds_under_25 || 'N/A' }
+            : null,
+        };
+        if (fixture.data_provider === 'bsd') {
+          const response = await fetch(`/api/fixtures/bsd-insights?fixtureId=${fixture.id}`, { cache: 'no-store' });
+          if (response.ok) Object.assign(nextDetails, await response.json());
+        }
+        setDetails(nextDetails);
+        return;
+      }
+
+      if (fixture.home_team_id && fixture.away_team_id) {
+        const response = await fetch(`/api/test/fixture-details?fixtureId=${fixture.api_fixture_id}&homeTeamId=${fixture.home_team_id}&awayTeamId=${fixture.away_team_id}&leagueId=${fixture.league_id}`);
+        if (response.ok) setDetails(await response.json());
+      }
+    } catch (cause) {
+      console.error('Match analysis unavailable:', cause);
+    } finally {
+      setDetailsLoading(false);
     }
   };
 
@@ -87,9 +140,12 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
               </div>
               <div className={`divide-y divide-slate-700/60 ${spansFullRow ? 'sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0' : ''}`}>
                 {playerPicks.map((sel) => (
-                  <div
+                  <button
                     key={sel.id}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3"
+                    type="button"
+                    onClick={() => openAnalysis(sel)}
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-3 text-left transition hover:bg-slate-800/70 active:bg-slate-800"
+                    aria-label={`View analysis for ${sel.fixture?.home_team} versus ${sel.fixture?.away_team}`}
                   >
                     <div className="min-w-0 text-xs">
                       <div className="flex items-start gap-1.5 font-semibold leading-snug text-white">
@@ -112,7 +168,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
                           </div>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -124,6 +180,41 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
         <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Awaiting picks</span>
         {waitingPlayers.map((player) => <span key={player} className="rounded-full border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[10px] font-semibold text-slate-400">{player}</span>)}
       </div>}
+
+      {activeSelection?.fixture && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/80 p-2 backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={() => setActiveSelection(null)}
+          role="presentation"
+        >
+          <section
+            className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${activeSelection.fixture.home_team} versus ${activeSelection.fixture.away_team} analysis`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-700 bg-slate-900/95 p-4 backdrop-blur">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">{activeSelection.player_name}&apos;s pick</div>
+                <h3 className="mt-1 text-base font-bold leading-snug text-white">
+                  {activeSelection.fixture.home_team}{activeSelection.fixture.home_team_position ? ` (#${activeSelection.fixture.home_team_position})` : ''}
+                  <span className="mx-1 text-slate-500">vs</span>
+                  {activeSelection.fixture.away_team}{activeSelection.fixture.away_team_position ? ` (#${activeSelection.fixture.away_team_position})` : ''}
+                </h3>
+              </div>
+              <button onClick={() => setActiveSelection(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xl text-slate-300" aria-label="Close match analysis">×</button>
+            </header>
+            <div className="p-4">
+              {detailsLoading
+                ? <div className="py-12 text-center text-sm text-slate-400">Loading predictions and form…</div>
+                : details
+                ? <FixtureInsights fixture={activeSelection.fixture} details={details} />
+                : <div className="py-12 text-center text-sm text-slate-400">Match analysis is not available yet.</div>}
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
