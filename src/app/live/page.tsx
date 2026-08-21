@@ -13,10 +13,15 @@ function MatchCard({ row }: { row: any }) {
     <Link href={isBsd ? `/live/${fixture.id}` : '#'} className={`block card ${isBsd ? 'active:scale-[.99]' : ''}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-slate-400">
-            {fixture.league_name} · {row.player_name} {isBsd ? '· BSD live' : '· 10 min updates'}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-300">
+              {row.player_name}&apos;s pick
+            </span>
+            <span className="text-[10px] uppercase tracking-wide text-slate-400">
+              {fixture.league_name}{!isBsd ? ' · 10 min updates' : ''}
+            </span>
           </div>
-          <div className="mt-1 text-sm font-semibold text-white truncate">
+          <div className="text-sm font-semibold text-white truncate">
             {fixture.home_team} <span className="text-slate-500">v</span> {fixture.away_team}
           </div>
           {isBsd && (
@@ -109,7 +114,6 @@ export default function LivePage() {
           <div className="text-3xl font-black text-emerald-400">{data.goals || 0}<span className="text-lg text-slate-400">/24</span></div>
         </div>
         <div className="mt-3 h-2.5 rounded-full bg-slate-700 overflow-hidden"><div className="h-full bg-emerald-400 transition-all" style={{ width: `${percentage}%` }} /></div>
-        <div className="mt-2 text-[10px] text-slate-500">Each pick contributes a maximum of three goals.</div>
       </section>
       {error && <div className="rounded-xl border border-red-700 bg-red-950/40 p-3 text-sm text-red-200">{error}</div>}
       {loading ? <div className="text-center text-slate-400 py-12">Loading live matches…</div> : (
