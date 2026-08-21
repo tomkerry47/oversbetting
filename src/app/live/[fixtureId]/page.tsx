@@ -30,7 +30,7 @@ export default function MatchCentrePage() {
   const fixture = data?.fixture;
   const live = data?.live;
   return (
-    <main className="w-full max-w-none space-y-4 px-1 py-5 pb-24 sm:px-2">
+    <main className="w-full max-w-none space-y-4 px-px py-5 pb-24">
       <Link href="/live" className="text-sm text-emerald-400">← All live picks</Link>
       {error && <div className="card text-red-300">{error}</div>}
       {!fixture ? <div className="text-center text-slate-400 py-16">Loading match centre…</div> : <>
