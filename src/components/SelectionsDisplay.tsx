@@ -187,7 +187,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
           role="presentation"
         >
           <section
-            className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl sm:max-h-[88dvh]"
+            className="mt-[8dvh] max-h-[calc(92dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl sm:mt-0 sm:max-h-[88dvh]"
             role="dialog"
             aria-modal="true"
             aria-label={`${activeSelection.fixture.home_team} versus ${activeSelection.fixture.away_team} analysis`}
