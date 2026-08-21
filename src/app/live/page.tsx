@@ -15,10 +15,10 @@ function MatchCard({ row }: { row: any }) {
     'extratime', 'penalties', 'finished', 'ft', 'ended',
   ].includes(status);
   return (
-    <Link href={isBsd ? `/live/${fixture.id}` : '#'} className={`block card ${isBsd ? 'active:scale-[.99]' : ''}`}>
+    <Link href={isBsd ? `/live/${fixture.id}` : '#'} className={`block card !p-2.5 sm:!p-3 ${isBsd ? 'active:scale-[.99]' : ''}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
             <span className="rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-300">
               {row.player_name}&apos;s pick
             </span>
@@ -30,7 +30,7 @@ function MatchCard({ row }: { row: any }) {
             {fixture.home_team} <span className="text-slate-500">v</span> {fixture.away_team}
           </div>
           {isBsd && hasStarted && (
-            <div className="mt-2 flex gap-3 text-[11px] text-slate-300">
+            <div className="mt-1 flex gap-3 text-[11px] text-slate-300">
               <span>Shots on target {row.live?.homeShotsOnTarget ?? '–'}–{row.live?.awayShotsOnTarget ?? '–'}</span>
               <span>xG {row.live?.homeXg?.toFixed?.(2) ?? '–'}–{row.live?.awayXg?.toFixed?.(2) ?? '–'}</span>
             </div>
@@ -123,8 +123,8 @@ export default function LivePage() {
       {error && <div className="rounded-xl border border-red-700 bg-red-950/40 p-3 text-sm text-red-200">{error}</div>}
       {loading ? <div className="text-center text-slate-400 py-12">Loading live matches…</div> : (
         <>
-          <section className="space-y-3"><h2 className="text-sm font-bold text-slate-200">In play / waiting ({active.length})</h2>{active.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>
-          {won.length > 0 && <section className="space-y-3 pt-3 border-t border-emerald-900"><h2 className="text-sm font-bold text-emerald-400">Won ({won.length})</h2>{won.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>}
+          <section className="space-y-1.5"><h2 className="pb-0.5 text-sm font-bold text-slate-200">In play / waiting ({active.length})</h2>{active.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>
+          {won.length > 0 && <section className="space-y-1.5 pt-2 border-t border-emerald-900"><h2 className="pb-0.5 text-sm font-bold text-emerald-400">Won ({won.length})</h2>{won.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>}
           {data.matches.length === 0 && <div className="card text-center text-slate-400 py-10">No picks have been selected for the active round.</div>}
         </>
       )}

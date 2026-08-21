@@ -41,6 +41,57 @@ interface FixtureDetails {
   expectedTotalGoals?: number | null;
 }
 
+function FixtureInsights({ fixture, details }: { fixture: Fixture; details: FixtureDetails }) {
+  const recentMatches = [...details.homeForm, ...details.awayForm];
+  const recentAverageGoals = recentMatches.length > 0
+    ? recentMatches.reduce((total, match) => total + match.homeScore + match.awayScore, 0) / recentMatches.length
+    : null;
+  const recentOver25 = recentMatches.length > 0
+    ? recentMatches.filter((match) => match.homeScore + match.awayScore >= 3).length / recentMatches.length * 100
+    : null;
+
+  return <>
+    {fixture.data_provider === 'bsd' && <>
+      <h4 className="mb-2 text-xs font-bold text-white">Prediction</h4>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
+          <div className="text-[9px] uppercase tracking-wide text-violet-300">Predicted score</div>
+          <div className="mt-1 text-lg font-black text-white">{details.predictedScore || '–'}</div>
+        </div>
+        <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
+          <div className="text-[9px] uppercase tracking-wide text-violet-300">Expected total goals</div>
+          <div className="mt-1 text-lg font-black text-white">{details.expectedTotalGoals?.toFixed(2) ?? '–'}</div>
+          {details.expectedHomeGoals != null && details.expectedAwayGoals != null && <div className="text-[9px] text-slate-400">{details.expectedHomeGoals.toFixed(2)} + {details.expectedAwayGoals.toFixed(2)}</div>}
+        </div>
+      </div>
+      <h4 className="mb-2 text-xs font-bold text-white">⚽ Recent goal trend</h4>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Average total goals</div><div className="mt-1 text-base font-bold text-white">{recentAverageGoals?.toFixed(2) ?? '–'}</div></div>
+        <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Recent Over 2.5</div><div className="mt-1 text-base font-bold text-white">{recentOver25 != null ? `${Math.round(recentOver25)}%` : '–'}</div><div className="text-[9px] text-slate-500">Last {recentMatches.length} combined</div></div>
+      </div>
+    </>}
+    <h4 className="mb-2 text-xs font-bold text-white">📊 Form (Last 5)</h4>
+    <div className="grid grid-cols-2 gap-2">
+      {([
+        { team: fixture.home_team, position: fixture.home_team_position, form: details.homeForm },
+        { team: fixture.away_team, position: fixture.away_team_position, form: details.awayForm },
+      ] as const).map(({ team, position, form }) => (
+        <div key={team} className="min-w-0 rounded-lg border border-slate-700 bg-slate-800/40 p-2">
+          <div className="mb-1 truncate text-[10px] font-semibold text-slate-300">
+            {team}{position ? ` (#${position})` : ''}
+          </div>
+          <div className="mb-1 flex flex-wrap gap-1">
+            {form.map((match, idx) => <div key={idx} className={`flex h-5 w-5 items-center justify-center rounded text-[9px] font-bold text-white ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'}`}>{match.result}</div>)}
+          </div>
+          <div className="space-y-0.5">
+            {form.map((match, idx) => <div key={idx} className="truncate text-[9px] text-slate-400">{match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}</div>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  </>;
+}
+
 export default function FixtureSelector({
   fixtures,
   weekId,
@@ -54,6 +105,8 @@ export default function FixtureSelector({
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedFixture, setExpandedFixture] = useState<number | null>(null);
   const [fixtureDetails, setFixtureDetails] = useState<Record<number, FixtureDetails>>({});
+  const [modalFixture, setModalFixture] = useState<Fixture | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState<number | null>(null);
 
   useEffect(() => {
     setSelectedPlayer(null);
@@ -63,12 +116,26 @@ export default function FixtureSelector({
     setSuccess(null);
     setExpandedFixture(null);
     setFixtureDetails({});
+    setModalFixture(null);
   }, [weekId]);
 
   useEffect(() => {
     setExpandedFixture(null);
     setFixtureDetails({});
   }, [fixtures]);
+
+  useEffect(() => {
+    if (!modalFixture) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setModalFixture(null);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [modalFixture]);
 
   const formatKickoffTime = (isoDate: string): string => {
     const date = new Date(isoDate);
@@ -153,16 +220,17 @@ export default function FixtureSelector({
     return odds;
   };
 
-  const fetchFixtureDetails = async (fixture: Fixture) => {
+  const loadFixtureDetails = async (fixture: Fixture): Promise<FixtureDetails | null> => {
     if (!fixture.home_team_id || !fixture.away_team_id) {
       console.error('Missing team IDs for fixture');
-      return;
+      return null;
     }
 
     if (fixtureDetails[fixture.id]) {
-      setExpandedFixture(expandedFixture === fixture.id ? null : fixture.id);
-      return;
+      return fixtureDetails[fixture.id];
     }
+
+    setDetailsLoading(fixture.id);
 
     // Use cached form/odds from fixtures table when available. BSD prediction
     // detail is fetched on expansion because it can change after the schedule.
@@ -185,8 +253,8 @@ export default function FixtureSelector({
         }
       }
       setFixtureDetails(prev => ({ ...prev, [fixture.id]: details }));
-      setExpandedFixture(fixture.id);
-      return;
+      setDetailsLoading(null);
+      return details;
     }
 
     try {
@@ -203,11 +271,28 @@ export default function FixtureSelector({
           };
         }
         setFixtureDetails(prev => ({ ...prev, [fixture.id]: data }));
-        setExpandedFixture(fixture.id);
+        setDetailsLoading(null);
+        return data;
       }
     } catch (err) {
       console.error('Error fetching fixture details:', err);
     }
+    setDetailsLoading(null);
+    return null;
+  };
+
+  const fetchFixtureDetails = async (fixture: Fixture) => {
+    if (expandedFixture === fixture.id) {
+      setExpandedFixture(null);
+      return;
+    }
+    const details = await loadFixtureDetails(fixture);
+    if (details) setExpandedFixture(fixture.id);
+  };
+
+  const openFixtureModal = async (fixture: Fixture) => {
+    setModalFixture(fixture);
+    await loadFixtureDetails(fixture);
   };
 
   const handleFixtureToggle = (fixtureId: number) => {
@@ -374,23 +459,17 @@ export default function FixtureSelector({
                       const isLocked = isPickedByOther && !isSelected;
                       const isExpanded = expandedFixture === fixture.id;
                       const details = fixtureDetails[fixture.id];
-                      const recentMatches = details ? [...details.homeForm, ...details.awayForm] : [];
-                      const recentAverageGoals = recentMatches.length > 0
-                        ? recentMatches.reduce((total, match) => total + match.homeScore + match.awayScore, 0) / recentMatches.length : null;
-                      const recentOver25 = recentMatches.length > 0
-                        ? recentMatches.filter((match) => match.homeScore + match.awayScore >= 3).length / recentMatches.length * 100 : null;
-
                       return (
                         <div key={fixture.id}>
                           <button
-                            onClick={() => handleFixtureToggle(fixture.id)}
-                            disabled={isFull || isLocked}
+                            onClick={() => isLocked ? openFixtureModal(fixture) : handleFixtureToggle(fixture.id)}
+                            disabled={isFull && !isLocked}
                             className={`w-full text-left p-3.5 border transition-all fixture-selectable
                               ${
                                 isSelected
                                   ? 'fixture-selected border-emerald-500'
                                   : isLocked
-                                  ? 'border-slate-700 bg-slate-800/50 opacity-45 cursor-not-allowed'
+                                  ? 'border-slate-700 bg-slate-800/50 opacity-65 cursor-pointer hover:border-violet-500/60'
                                   : isFull
                                   ? 'border-slate-700 bg-slate-800/50 opacity-40 cursor-not-allowed'
                                   : 'border-slate-700 bg-slate-800/50'
@@ -412,8 +491,10 @@ export default function FixtureSelector({
                                 <div className="w-full min-w-0">
                                   <div className="text-sm font-medium text-white whitespace-normal break-words leading-snug">
                                     {fixture.home_team}
+                                    {fixture.home_team_position && <span className="ml-1 text-[10px] font-normal text-slate-400">#{fixture.home_team_position}</span>}
                                     <span className="text-slate-500 text-xs mx-1">vs</span>
                                     {fixture.away_team}
+                                    {fixture.away_team_position && <span className="ml-1 text-[10px] font-normal text-slate-400">#{fixture.away_team_position}</span>}
                                   </div>
                                   <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 whitespace-nowrap">
                                     <span className="inline-flex items-center rounded-md bg-slate-700/60 border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200">
@@ -470,76 +551,7 @@ export default function FixtureSelector({
 
                           {isExpanded && details && (
                             <div className="bg-slate-900 border border-slate-700 border-t-0 rounded-b-xl p-3">
-                              {fixture.data_provider === 'bsd' && <>
-                                <h4 className="mb-2 text-xs font-bold text-white">🔮 BSD prediction</h4>
-                                <div className="mb-3 grid grid-cols-2 gap-2">
-                                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
-                                    <div className="text-[9px] uppercase tracking-wide text-violet-300">Predicted score</div>
-                                    <div className="mt-1 text-lg font-black text-white">{details.predictedScore || '–'}</div>
-                                  </div>
-                                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-2 text-center">
-                                    <div className="text-[9px] uppercase tracking-wide text-violet-300">Expected total goals</div>
-                                    <div className="mt-1 text-lg font-black text-white">{details.expectedTotalGoals?.toFixed(2) ?? '–'}</div>
-                                    {details.expectedHomeGoals != null && details.expectedAwayGoals != null && <div className="text-[9px] text-slate-400">{details.expectedHomeGoals.toFixed(2)} + {details.expectedAwayGoals.toFixed(2)}</div>}
-                                  </div>
-                                </div>
-                                <h4 className="mb-2 text-xs font-bold text-white">⚽ Recent goal trend</h4>
-                                <div className="mb-3 grid grid-cols-2 gap-2">
-                                  <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Average total goals</div><div className="mt-1 text-base font-bold text-white">{recentAverageGoals?.toFixed(2) ?? '–'}</div></div>
-                                  <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-center"><div className="text-[9px] uppercase tracking-wide text-slate-400">Recent Over 2.5</div><div className="mt-1 text-base font-bold text-white">{recentOver25 != null ? `${Math.round(recentOver25)}%` : '–'}</div><div className="text-[9px] text-slate-500">Last {recentMatches.length} combined</div></div>
-                                </div>
-                              </>}
-                              <h4 className="text-xs font-bold text-white mb-2">📊 Form (Last 5)</h4>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
-                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">
-                                    {fixture.home_team}
-                                    {fixture.home_team_position ? ` (#${fixture.home_team_position})` : ''}
-                                  </div>
-                                  <div className="flex gap-1 mb-1">
-                                    {details.homeForm.map((match, idx) => (
-                                      <div
-                                        key={idx}
-                                        className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
-                                          ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
-                                      >
-                                        {match.result}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="space-y-0.5">
-                                    {details.homeForm.map((match, idx) => (
-                                      <div key={idx} className="text-[9px] text-slate-400">
-                                        {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-2">
-                                  <div className="text-[10px] font-semibold text-slate-300 mb-1">
-                                    {fixture.away_team}
-                                    {fixture.away_team_position ? ` (#${fixture.away_team_position})` : ''}
-                                  </div>
-                                  <div className="flex gap-1 mb-1">
-                                    {details.awayForm.map((match, idx) => (
-                                      <div
-                                        key={idx}
-                                        className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold
-                                          ${match.result === 'W' ? 'bg-emerald-500' : match.result === 'D' ? 'bg-slate-500' : 'bg-red-500'} text-white`}
-                                      >
-                                        {match.result}
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div className="space-y-0.5">
-                                    {details.awayForm.map((match, idx) => (
-                                      <div key={idx} className="text-[9px] text-slate-400">
-                                        {match.homeAway === 'H' ? 'vs' : '@'} {match.opponent}: {match.homeScore}-{match.awayScore}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
+                              <FixtureInsights fixture={fixture} details={details} />
                             </div>
                           )}
                         </div>
@@ -602,6 +614,42 @@ export default function FixtureSelector({
       {success && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-xl text-sm">
           {success}
+        </div>
+      )}
+
+      {modalFixture && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/80 p-2 backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={() => setModalFixture(null)}
+          role="presentation"
+        >
+          <section
+            className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${modalFixture.home_team} versus ${modalFixture.away_team} analysis`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-700 bg-slate-900/95 p-4 backdrop-blur">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Match analysis</div>
+                <h3 className="mt-1 text-base font-bold leading-snug text-white">
+                  {modalFixture.home_team}{modalFixture.home_team_position ? ` (#${modalFixture.home_team_position})` : ''}
+                  <span className="mx-1 text-slate-500">vs</span>
+                  {modalFixture.away_team}{modalFixture.away_team_position ? ` (#${modalFixture.away_team_position})` : ''}
+                </h3>
+                <div className="mt-1 text-xs text-slate-400">Picked by {(fixturePickedByPlayers[modalFixture.id] || []).join(', ')}</div>
+              </div>
+              <button onClick={() => setModalFixture(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xl text-slate-300" aria-label="Close match analysis">×</button>
+            </header>
+            <div className="p-4">
+              {detailsLoading === modalFixture.id && !fixtureDetails[modalFixture.id]
+                ? <div className="py-12 text-center text-sm text-slate-400">Loading predictions and form…</div>
+                : fixtureDetails[modalFixture.id]
+                ? <FixtureInsights fixture={modalFixture} details={fixtureDetails[modalFixture.id]} />
+                : <div className="py-12 text-center text-sm text-slate-400">Match analysis is not available yet.</div>}
+            </div>
+          </section>
         </div>
       )}
     </div>
