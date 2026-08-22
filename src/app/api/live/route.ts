@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchBsdSocketMatches, parseBsdMatch } from '@/lib/bsd-api';
 import { fetchFixtureResults } from '@/lib/football-api';
-import { getActiveRoundWindow } from '@/lib/utils';
+import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 const TEN_MINUTES = 10 * 60 * 1000;
+const LIVE_ROUND_RETENTION_MS = 12 * 60 * 60 * 1000;
 
 function canBeLive(kickOff: string) {
   const delta = Date.now() - new Date(kickOff).getTime();
@@ -24,15 +25,15 @@ export async function GET() {
   try {
     // Include the current round even after result processing marks it complete,
     // but never fall back to an old round that was accidentally left active.
-    const { startDate, endDate } = getActiveRoundWindow(6, 1);
+    const { startDate, endDate } = getActiveRoundWindow(8, 2);
     const { data: candidateWeeks, error: weekError } = await supabase
       .from('weeks').select('*')
       .gte('target_date', startDate)
       .lte('target_date', endDate)
-      .order('target_date', { ascending: false })
-      .order('target_kickoff_time', { ascending: false })
-      .order('week_number', { ascending: false })
-      .order('id', { ascending: false });
+      .order('target_date', { ascending: true })
+      .order('target_kickoff_time', { ascending: true })
+      .order('week_number', { ascending: true })
+      .order('id', { ascending: true });
     if (weekError) throw weekError;
     if (!candidateWeeks?.length) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
 
@@ -43,7 +44,12 @@ export async function GET() {
     if (error) throw error;
 
     const selectedWeekIds = new Set((selections || []).map((selection: any) => selection.week_id));
-    const week = candidateWeeks.find((candidate: any) => selectedWeekIds.has(candidate.id)) || candidateWeeks[0];
+    const now = Date.now();
+    const visibleWeeks = candidateWeeks.filter((candidate: any) =>
+      now < getRoundResultsAvailableAt(candidate.target_date, candidate.target_kickoff_time).getTime() + LIVE_ROUND_RETENTION_MS
+    );
+    const week = visibleWeeks.find((candidate: any) => selectedWeekIds.has(candidate.id)) || visibleWeeks[0];
+    if (!week) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
     const weekSelections = (selections || []).filter((selection: any) => selection.week_id === week.id);
 
     const bsdEventIds = weekSelections
