@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchBsdSocketMatches, parseBsdMatch } from '@/lib/bsd-api';
+import { bsdMatchStatsSnapshot, fetchBsdSocketMatches, hasBsdMatchStats, parseBsdMatch } from '@/lib/bsd-api';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
@@ -67,12 +67,23 @@ export async function GET() {
         const socketEvent = socketMatches[Number(fixture.bsd_event_id)];
         live = socketEvent ? parseBsdMatch(socketEvent) : null;
         if (live) {
-          await supabase.from('fixtures').update({
+          const stats = bsdMatchStatsSnapshot(live);
+          const update: Record<string, any> = {
             home_score: live.homeScore,
             away_score: live.awayScore,
             match_status: shortStatus(live.status),
             live_updated_at: new Date().toISOString(),
-          }).eq('id', fixture.id);
+          };
+          if (hasBsdMatchStats(stats)) {
+            update.final_stats = stats;
+            update.stats_updated_at = new Date().toISOString();
+          }
+          const updated = await supabase.from('fixtures').update(update).eq('id', fixture.id);
+          if (updated.error && update.final_stats) {
+            delete update.final_stats;
+            delete update.stats_updated_at;
+            await supabase.from('fixtures').update(update).eq('id', fixture.id);
+          }
         }
       } else if (fixture?.data_provider !== 'bsd' && canBeLive(fixture.kick_off)) {
         const due = !fixture.live_updated_at || Date.now() - new Date(fixture.live_updated_at).getTime() >= TEN_MINUTES;

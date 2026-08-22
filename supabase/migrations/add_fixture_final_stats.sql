@@ -1,0 +1,3 @@
+ALTER TABLE fixtures
+  ADD COLUMN IF NOT EXISTS final_stats JSONB,
+  ADD COLUMN IF NOT EXISTS stats_updated_at TIMESTAMPTZ;

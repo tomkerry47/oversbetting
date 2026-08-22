@@ -164,6 +164,31 @@ export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPa
   };
 }
 
+export function bsdMatchStatsSnapshot(match: any) {
+  return {
+    homeShotsOnTarget: match.homeShotsOnTarget ?? null,
+    awayShotsOnTarget: match.awayShotsOnTarget ?? null,
+    homeShots: match.homeShots ?? null,
+    awayShots: match.awayShots ?? null,
+    homeXg: match.homeXg ?? null,
+    awayXg: match.awayXg ?? null,
+    homePossession: match.homePossession ?? null,
+    awayPossession: match.awayPossession ?? null,
+    homeCorners: match.homeCorners ?? null,
+    awayCorners: match.awayCorners ?? null,
+  };
+}
+
+export function hasBsdMatchStats(stats: any) {
+  return [
+    stats?.homeShotsOnTarget, stats?.awayShotsOnTarget,
+    stats?.homeShots, stats?.awayShots,
+    stats?.homeXg, stats?.awayXg,
+    stats?.homePossession, stats?.awayPossession,
+    stats?.homeCorners, stats?.awayCorners,
+  ].some((value) => value !== null && value !== undefined);
+}
+
 export async function fetchBsdMatch(eventId: number, includeTimeline = false) {
   const [event, stats, incidents, socket] = await Promise.all([
     bsdRequest(`/events/${eventId}/`),

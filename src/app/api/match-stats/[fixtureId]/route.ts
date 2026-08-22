@@ -69,6 +69,19 @@ export async function GET(_request: NextRequest, { params }: { params: { fixture
     if (error) throw error;
 
     if (fixture.data_provider === 'bsd' && fixture.bsd_event_id) {
+      if (fixture.match_status === 'FT' && fixture.final_stats) {
+        const match = fixture.final_stats;
+        return NextResponse.json({
+          provider: 'bsd',
+          stats: {
+            shotsOnTarget: { home: match.homeShotsOnTarget, away: match.awayShotsOnTarget },
+            shots: { home: match.homeShots, away: match.awayShots },
+            xg: { home: match.homeXg, away: match.awayXg },
+            possession: { home: match.homePossession, away: match.awayPossession },
+            corners: { home: match.homeCorners, away: match.awayCorners },
+          },
+        });
+      }
       const match = await fetchBsdMatch(Number(fixture.bsd_event_id));
       return NextResponse.json({
         provider: 'bsd',
@@ -87,4 +100,3 @@ export async function GET(_request: NextRequest, { params }: { params: { fixture
     return NextResponse.json({ error: error?.message || 'Match statistics are unavailable' }, { status: 502 });
   }
 }
-

@@ -7,6 +7,8 @@ type LiveAlert = { id: string; fixtureId: string; title: string; detail: string 
 
 function MatchCard({ row }: { row: any }) {
   const fixture = row.fixture;
+  const storedStats = fixture.final_stats || {};
+  const stat = (key: string) => row.live?.[key] ?? storedStats[key] ?? null;
   const goals = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
   const isBsd = fixture.data_provider === 'bsd';
   const status = String(row.live?.status || fixture.match_status || '').toLowerCase().replaceAll('_', '');
@@ -45,8 +47,8 @@ function MatchCard({ row }: { row: any }) {
           </div>
           {isBsd && hasStarted && (
             <div className="mt-1 flex gap-3 text-[11px] text-slate-300">
-              <span>Shots on target {row.live?.homeShotsOnTarget ?? '–'}–{row.live?.awayShotsOnTarget ?? '–'}</span>
-              <span>xG {row.live?.homeXg?.toFixed?.(2) ?? '–'}–{row.live?.awayXg?.toFixed?.(2) ?? '–'}</span>
+              <span>Shots on target {stat('homeShotsOnTarget') ?? '–'}–{stat('awayShotsOnTarget') ?? '–'}</span>
+              <span>xG {stat('homeXg')?.toFixed?.(2) ?? '–'}–{stat('awayXg')?.toFixed?.(2) ?? '–'}</span>
             </div>
           )}
         </div>

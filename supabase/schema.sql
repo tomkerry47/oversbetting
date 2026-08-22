@@ -53,6 +53,8 @@ CREATE TABLE fixtures (
   bsd_live_websocket BOOLEAN NOT NULL DEFAULT FALSE,
   bsd_websocket_plus BOOLEAN NOT NULL DEFAULT FALSE,
   live_updated_at TIMESTAMPTZ,
+  final_stats     JSONB,
+  stats_updated_at TIMESTAMPTZ,
   is_star_pick    BOOLEAN NOT NULL DEFAULT FALSE,
   star_rank       INT,
   star_score      DOUBLE PRECISION,

@@ -146,6 +146,47 @@ def fetch_bsd_event_result(event_id: int) -> Dict[str, Any]:
     return payload.get("event") or payload.get("data") or payload
 
 
+def _number_at(value: Any, *keys: str) -> Optional[float]:
+    for key in keys:
+        candidate = value.get(key) if isinstance(value, dict) else None
+        if isinstance(candidate, dict):
+            candidate = candidate.get("actual")
+        if candidate is not None:
+            try:
+                return float(candidate)
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def fetch_bsd_final_stats(event_id: int) -> Optional[Dict[str, Any]]:
+    token = os.getenv("BZZOIRO_API_TOKEN") or os.getenv("bsd_event_id")
+    response = requests.get(
+        f"{BSD_API_BASE}/events/{event_id}/stats/",
+        headers={"Authorization": f"Token {token}", "Accept": "application/json"},
+        timeout=45,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"BSD stats error {response.status_code}: {response.text[:250]}")
+    payload = response.json()
+    stats = payload.get("stats") or (payload.get("data") or {}).get("stats") or payload.get("data") or payload
+    home = stats.get("home") or stats.get("home_team") or {}
+    away = stats.get("away") or stats.get("away_team") or {}
+    snapshot = {
+        "homeShotsOnTarget": _number_at(home, "shots_on_target", "shotsOnTarget"),
+        "awayShotsOnTarget": _number_at(away, "shots_on_target", "shotsOnTarget"),
+        "homeShots": _number_at(home, "shots_total", "total_shots", "shots"),
+        "awayShots": _number_at(away, "shots_total", "total_shots", "shots"),
+        "homeXg": _number_at(home, "xg", "expected_goals", "expectedGoals"),
+        "awayXg": _number_at(away, "xg", "expected_goals", "expectedGoals"),
+        "homePossession": _number_at(home, "possession", "ball_possession"),
+        "awayPossession": _number_at(away, "possession", "ball_possession"),
+        "homeCorners": _number_at(home, "corners", "corner_kicks"),
+        "awayCorners": _number_at(away, "corners", "corner_kicks"),
+    }
+    return snapshot if any(value is not None for value in snapshot.values()) else None
+
+
 def bsd_status_short(value: Any) -> str:
     status = str(value or "").lower().replace("_", "")
     if status in {"finished", "ft", "ended"}:
@@ -264,22 +305,36 @@ def main() -> int:
             fixture_api_id = fixture.get("provider_fixture_id") or fixture["api_fixture_id"]
             try:
                 if fixture.get("data_provider") == "bsd":
-                    event = fetch_bsd_event_result(int(fixture.get("bsd_event_id") or fixture_api_id))
+                    bsd_event_id = int(fixture.get("bsd_event_id") or fixture_api_id)
+                    event = fetch_bsd_event_result(bsd_event_id)
                     home_score = event.get("home_score")
                     away_score = event.get("away_score")
                     short = bsd_status_short(event.get("status"))
+                    final_stats = fetch_bsd_final_stats(bsd_event_id)
                 else:
                     event = fetch_event_result(tls_session, fixture_api_id)
                     home_score = (event.get("homeScore") or {}).get("current")
                     away_score = (event.get("awayScore") or {}).get("current")
                     short = status_short((event.get("status") or {}).get("type", "notstarted"))
+                    final_stats = None
 
-                db.patch(
-                    "fixtures",
-                    {"id": f"eq.{fixture['id']}"},
-                    {"home_score": home_score, "away_score": away_score, "match_status": short,
-                     "live_updated_at": dt.datetime.now(dt.timezone.utc).isoformat()},
-                )
+                fixture_update = {
+                    "home_score": home_score, "away_score": away_score, "match_status": short,
+                    "live_updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                }
+                if final_stats:
+                    fixture_update["final_stats"] = final_stats
+                    fixture_update["stats_updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                try:
+                    db.patch("fixtures", {"id": f"eq.{fixture['id']}"}, fixture_update)
+                except RuntimeError:
+                    # Keep score processing compatible until the final-stats
+                    # migration has been applied in every environment.
+                    if "final_stats" not in fixture_update:
+                        raise
+                    fixture_update.pop("final_stats", None)
+                    fixture_update.pop("stats_updated_at", None)
+                    db.patch("fixtures", {"id": f"eq.{fixture['id']}"}, fixture_update)
                 print(f"[Results] Updated fixture {fixture_api_id}: {home_score}-{away_score} ({short})")
             except Exception as exc:
                 print(f"[Results] Skipped fixture {fixture_api_id}: {exc}", file=sys.stderr)

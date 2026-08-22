@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { GOAL_THRESHOLD } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
-import { fetchBsdMatch } from '@/lib/bsd-api';
+import { bsdMatchStatsSnapshot, fetchBsdMatch, hasBsdMatchStats } from '@/lib/bsd-api';
 
 /**
  * POST /api/results - Check results for the current week's selections.
@@ -120,10 +120,21 @@ export async function POST(request: NextRequest) {
         const rawStatus = String(live.status || '').toLowerCase().replaceAll('_', '');
         const status = ['finished', 'ft', 'ended'].includes(rawStatus)
           ? 'FT' : ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
-        await supabase.from('fixtures').update({
+        const stats = bsdMatchStatsSnapshot(live);
+        const update: Record<string, any> = {
           home_score: live.homeScore, away_score: live.awayScore,
           match_status: status, live_updated_at: new Date().toISOString(),
-        }).eq('id', fixture.id);
+        };
+        if (hasBsdMatchStats(stats)) {
+          update.final_stats = stats;
+          update.stats_updated_at = new Date().toISOString();
+        }
+        const updated = await supabase.from('fixtures').update(update).eq('id', fixture.id);
+        if (updated.error && update.final_stats) {
+          delete update.final_stats;
+          delete update.stats_updated_at;
+          await supabase.from('fixtures').update(update).eq('id', fixture.id);
+        }
       } catch (error) {
         console.error(`[Results] BSD fixture ${fixture.bsd_event_id} failed`, error);
       }
