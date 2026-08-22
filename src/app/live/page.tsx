@@ -18,7 +18,10 @@ function MatchCard({ row }: { row: any }) {
     'live', 'inprogress', '1sthalf', '2ndhalf', 'halftime', 'paused',
     'extratime', 'penalties',
   ].includes(status);
-  const clock = status === 'halftime'
+  const isFinished = ['finished', 'ft', 'ended'].includes(status);
+  const clock = isFinished
+    ? 'FT'
+    : status === 'halftime'
     ? 'HT'
     : row.live?.minute != null
     ? `${row.live.minute}′`
