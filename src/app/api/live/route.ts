@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { bsdMatchStatsSnapshot, fetchBsdSocketMatches, hasBsdMatchStats, parseBsdMatch } from '@/lib/bsd-api';
+import { bsdMatchStatsSnapshot, fetchBsdMatch, fetchBsdSocketMatches, hasBsdMatchStats, parseBsdMatch } from '@/lib/bsd-api';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
@@ -63,6 +63,7 @@ export async function GET() {
     const matches = await Promise.all(weekSelections.map(async (selection: any) => {
       const fixture = selection.fixture;
       let live: any = null;
+      let finalStats = fixture?.final_stats ?? null;
       if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off)) {
         const socketEvent = socketMatches[Number(fixture.bsd_event_id)];
         live = socketEvent ? parseBsdMatch(socketEvent) : null;
@@ -85,6 +86,18 @@ export async function GET() {
             await supabase.from('fixtures').update(update).eq('id', fixture.id);
           }
         }
+      } else if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && fixture.match_status === 'FT' && finalStats === null) {
+        // Backfill completed fixtures created before final-stat persistence.
+        // Saving even an empty snapshot ensures a missing provider feed is not
+        // requested again on every overview refresh.
+        const archived = await fetchBsdMatch(Number(fixture.bsd_event_id)).catch(() => null);
+        if (archived) {
+          finalStats = bsdMatchStatsSnapshot(archived);
+          await supabase.from('fixtures').update({
+            final_stats: finalStats,
+            stats_updated_at: new Date().toISOString(),
+          }).eq('id', fixture.id);
+        }
       } else if (fixture?.data_provider !== 'bsd' && canBeLive(fixture.kick_off)) {
         const due = !fixture.live_updated_at || Date.now() - new Date(fixture.live_updated_at).getTime() >= TEN_MINUTES;
         if (due) {
@@ -104,7 +117,7 @@ export async function GET() {
       }
       const homeScore = live?.homeScore ?? fixture?.home_score ?? 0;
       const awayScore = live?.awayScore ?? fixture?.away_score ?? 0;
-      return { ...selection, fixture: { ...fixture, home_score: homeScore, away_score: awayScore }, live };
+      return { ...selection, fixture: { ...fixture, home_score: homeScore, away_score: awayScore, final_stats: finalStats }, live };
     }));
 
     const goals = matches.reduce((sum: number, row: any) =>
