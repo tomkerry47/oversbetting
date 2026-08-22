@@ -102,9 +102,11 @@ export default function HistoryPage() {
       });
       const triggerData = await res.json().catch(() => ({}));
       if (res.ok) {
-        // Poll week details for up to ~60s to catch workflow completion.
-        for (let i = 0; i < 12; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+        // BSD-only rounds complete inline. Hybrid rounds still wait for the
+        // GitHub/SofaScore workflow.
+        const attempts = triggerData.mode === 'direct' ? 1 : 12;
+        for (let i = 0; i < attempts; i++) {
+          if (triggerData.mode !== 'direct') await new Promise((resolve) => setTimeout(resolve, 5000));
           const dataRes = await fetch(`/api/history?week_id=${weekId}`);
           const data = await dataRes.json();
           setWeekData((prev) => ({

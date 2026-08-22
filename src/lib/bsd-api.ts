@@ -241,7 +241,7 @@ export function fetchBsdSocketMatches(eventIds: number[]): Promise<Record<number
       try {
         const message = JSON.parse(raw.toString());
         if (message.type === 'ping') socket.send(JSON.stringify({ action: 'ping' }));
-        const eventId = Number(message.event_id);
+        const eventId = Number(message.event_id || message.event?.id || message.data?.id);
         if (eventId && message.type === 'subscribed') {
           if (message.event) events[eventId] = message.event;
           completed.add(eventId);

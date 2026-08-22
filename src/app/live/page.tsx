@@ -14,6 +14,17 @@ function MatchCard({ row }: { row: any }) {
     'live', 'inprogress', '1sthalf', '2ndhalf', 'halftime', 'paused',
     'extratime', 'penalties', 'finished', 'ft', 'ended',
   ].includes(status);
+  const isRunning = [
+    'live', 'inprogress', '1sthalf', '2ndhalf', 'halftime', 'paused',
+    'extratime', 'penalties',
+  ].includes(status);
+  const clock = status === 'halftime'
+    ? 'HT'
+    : row.live?.minute != null
+    ? `${row.live.minute}′`
+    : isRunning
+    ? 'LIVE'
+    : null;
   return (
     <Link href={isBsd ? `/live/${fixture.id}` : '#'} className={`block card !p-2.5 sm:!p-3 ${isBsd ? 'active:scale-[.99]' : ''}`}>
       <div className="flex items-center justify-between gap-3">
@@ -37,6 +48,7 @@ function MatchCard({ row }: { row: any }) {
           )}
         </div>
         <div className="text-right shrink-0">
+          {clock && <div className="mb-0.5 text-xs font-bold tabular-nums text-emerald-400">{clock}</div>}
           <div className="text-2xl font-black text-white">{fixture.home_score ?? 0}–{fixture.away_score ?? 0}</div>
           <div className={goals >= 3 ? 'text-emerald-400 text-xs font-bold' : 'text-amber-300 text-xs'}>
             {goals >= 3 ? 'WON ✓' : `${Math.min(goals, 3)}/3 goals`}
@@ -50,11 +62,16 @@ function MatchCard({ row }: { row: any }) {
 export default function LivePage() {
   const [data, setData] = useState<any>({ matches: [], goals: 0, target: 24 });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [alerts, setAlerts] = useState<LiveAlert[]>([]);
   const previousScores = useRef<Record<string, number>>({});
   const hasLoaded = useRef(false);
+  const requestInFlight = useRef(false);
   const load = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setRefreshing(true);
     try {
       const response = await fetch('/api/live', { cache: 'no-store' });
       const body = await response.json();
@@ -91,13 +108,18 @@ export default function LivePage() {
       hasLoaded.current = true;
       setData(body); setError('');
     } catch (cause: any) { setError(cause.message); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); requestInFlight.current = false; }
   }, []);
 
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 15_000);
-    return () => window.clearInterval(timer);
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [load]);
 
   const active = data.matches.filter((row: any) => Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0) < 3);
@@ -114,8 +136,20 @@ export default function LivePage() {
         </Link>)}
       </div>
       <section className="card overflow-hidden">
-        <div className="flex items-end justify-between">
-          <h1 className="text-xl font-bold text-white">Live picks</h1>
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-white">Live picks</h1>
+            <button
+              type="button"
+              onClick={load}
+              disabled={refreshing}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-600 bg-slate-700/60 text-base text-slate-300 transition hover:text-white disabled:opacity-50"
+              aria-label="Refresh live matches now"
+              title={data.refreshedAt ? `Last updated ${new Date(data.refreshedAt).toLocaleTimeString('en-GB')}` : 'Refresh live matches now'}
+            >
+              <span className={refreshing ? 'animate-spin' : ''}>↻</span>
+            </button>
+          </div>
           <div className="text-3xl font-black text-emerald-400">{data.goals || 0}<span className="text-lg text-slate-400">/24</span></div>
         </div>
         <div className="mt-3 h-2.5 rounded-full bg-slate-700 overflow-hidden"><div className="h-full bg-emerald-400 transition-all" style={{ width: `${percentage}%` }} /></div>

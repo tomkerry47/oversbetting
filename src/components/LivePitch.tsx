@@ -192,6 +192,9 @@ export default function LivePitch({ detail, streamUrl, onMatchEvent, eventId, we
         } else if (message.type === 'event') {
           eventCallback.current?.(message);
         } else {
+          // Livedata/action frames can also contain clock, score or stat
+          // corrections. Let the Match Centre merge anything useful from them.
+          eventCallback.current?.(message);
           setStreamItems((current) => reconcile([...current, message]).slice(-1500));
         }
       } catch { /* Ignore malformed live frames and keep the last good position. */ }

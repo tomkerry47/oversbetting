@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
 type DispatchBody = {
   ref: string;
@@ -9,6 +10,41 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const weekId = body?.week_id;
+
+    // BSD-supported selections can be resolved synchronously in this request;
+    // reserve the slower GitHub workflow for rounds containing SofaScore picks.
+    if (weekId !== undefined && weekId !== null && `${weekId}`.trim() !== '') {
+      const { data: selections, error: selectionError } = await supabase
+        .from('selections')
+        .select('fixture:fixtures(data_provider, bsd_event_id)')
+        .eq('week_id', Number(weekId));
+      if (selectionError) throw selectionError;
+      const allSelectedFixturesUseBsd = Boolean(selections?.length) && selections.every((selection: any) =>
+        selection.fixture?.data_provider === 'bsd' && selection.fixture?.bsd_event_id
+      );
+
+      if (allSelectedFixturesUseBsd) {
+        const directResponse = await fetch(new URL('/api/results', request.url), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week_id: Number(weekId) }),
+          cache: 'no-store',
+        });
+        const directBody = await directResponse.json().catch(() => ({}));
+        if (!directResponse.ok) {
+          return NextResponse.json(
+            { error: directBody.error || 'Direct BSD results check failed' },
+            { status: directResponse.status }
+          );
+        }
+        return NextResponse.json({
+          ok: true,
+          mode: 'direct',
+          message: 'BSD results updated',
+          week_id: `${weekId}`,
+        });
+      }
+    }
 
     const token = process.env.GITHUB_ACTIONS_TRIGGER_TOKEN;
     const owner = process.env.GITHUB_REPO_OWNER || process.env.VERCEL_GIT_REPO_OWNER;

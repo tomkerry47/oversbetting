@@ -67,11 +67,19 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Results] Checking results for week ${week.id} (${week.target_date} ${week.target_kickoff_time})`);
 
-    // Get all fixtures for the week
-    const { data: fixtures } = await supabase
-      .from('fixtures')
-      .select('*')
+    // Only fetch results for selected fixtures. A week can contain dozens of
+    // candidates, but result processing only needs the eight actual picks.
+    const { data: initialSelections, error: selectionError } = await supabase
+      .from('selections')
+      .select('*, fixture:fixtures(*)')
       .eq('week_id', week.id);
+    if (selectionError) throw selectionError;
+    const fixtures = Array.from(new Map(
+      (initialSelections || [])
+        .map((selection: any) => selection.fixture)
+        .filter(Boolean)
+        .map((fixture: any) => [fixture.id, fixture])
+    ).values()) as any[];
 
     if (!fixtures || fixtures.length === 0) {
       return NextResponse.json({ error: 'No fixtures found for this week' }, { status: 404 });
@@ -120,12 +128,6 @@ export async function POST(request: NextRequest) {
         console.error(`[Results] BSD fixture ${fixture.bsd_event_id} failed`, error);
       }
     }
-
-    // Re-fetch updated fixtures
-    const { data: updatedFixtures } = await supabase
-      .from('fixtures')
-      .select('*')
-      .eq('week_id', week.id);
 
     // Get all selections for the week
     const { data: selections } = await supabase
