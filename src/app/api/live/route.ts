@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { fetchBsdSocketMatches, parseBsdMatch } from '@/lib/bsd-api';
 import { fetchFixtureResults } from '@/lib/football-api';
+import { getActiveRoundWindow } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 const TEN_MINUTES = 10 * 60 * 1000;
@@ -21,23 +22,28 @@ function shortStatus(value: unknown) {
 
 export async function GET() {
   try {
-    const { data: activeWeeks, error: weekError } = await supabase
-      .from('weeks').select('*').eq('status', 'active')
+    // Include the current round even after result processing marks it complete,
+    // but never fall back to an old round that was accidentally left active.
+    const { startDate, endDate } = getActiveRoundWindow(6, 1);
+    const { data: candidateWeeks, error: weekError } = await supabase
+      .from('weeks').select('*')
+      .gte('target_date', startDate)
+      .lte('target_date', endDate)
       .order('target_date', { ascending: false })
       .order('target_kickoff_time', { ascending: false })
       .order('week_number', { ascending: false })
       .order('id', { ascending: false });
     if (weekError) throw weekError;
-    if (!activeWeeks?.length) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
+    if (!candidateWeeks?.length) return NextResponse.json({ week: null, matches: [], goals: 0, target: 24 });
 
     const { data: selections, error } = await supabase
       .from('selections').select('*, fixture:fixtures(*)')
-      .in('week_id', activeWeeks.map((candidate: any) => candidate.id))
+      .in('week_id', candidateWeeks.map((candidate: any) => candidate.id))
       .order('created_at');
     if (error) throw error;
 
     const selectedWeekIds = new Set((selections || []).map((selection: any) => selection.week_id));
-    const week = activeWeeks.find((candidate: any) => selectedWeekIds.has(candidate.id)) || activeWeeks[0];
+    const week = candidateWeeks.find((candidate: any) => selectedWeekIds.has(candidate.id)) || candidateWeeks[0];
     const weekSelections = (selections || []).filter((selection: any) => selection.week_id === week.id);
 
     const bsdEventIds = weekSelections
