@@ -71,7 +71,7 @@ export default function LivePitch({
 
   const arenaStatus = String(matchStatus || detail?.status || '').toLowerCase().replaceAll('_', '');
   const arenaMode = ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'paused', 'extratime'].includes(arenaStatus) ? 'live' : 'replay';
-  const arenaUrl = `https://arena.bzzoiro.com/embed/${arenaMode}/${eventId}/?key=${encodeURIComponent(arenaKey!)}&off=scoreboard%2Cads%2Cpressure&dim=3&quality=high`;
+  const arenaUrl = `https://arena.bzzoiro.com/embed/${arenaMode}/${eventId}/?key=${encodeURIComponent(arenaKey!)}&off=scoreboard%2Cads%2Cpressure&dim=3&quality=high&cam=fixed`;
   const connectionLabel = feedError
     ? 'Feed error'
     : feedSource === 'full'
@@ -97,12 +97,13 @@ export default function LivePitch({
           <button
             type="button"
             onClick={() => setIsCollapsed((current) => !current)}
-            className="flex min-h-9 items-center gap-2 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-white"
+            className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-slate-700/60 hover:text-slate-200"
             aria-controls="arena-3d-viewer"
             aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Expand Arena3D' : 'Collapse Arena3D'}
+            title={isCollapsed ? 'Expand Arena3D' : 'Collapse Arena3D'}
           >
-            {isCollapsed ? 'Show 3D' : 'Collapse'}
-            <span aria-hidden="true" className={`text-base leading-none transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>⌄</span>
+            <span aria-hidden="true" className={`text-sm leading-none transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>⌄</span>
           </button>
         </div>
       </div>
