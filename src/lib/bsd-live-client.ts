@@ -9,13 +9,21 @@ export function mergeBsdLiveEvent(current: any, payload: any) {
   const home = stats.home || stats.home_team || {};
   const away = stats.away || stats.away_team || {};
   const choose = (next: any, previous: any) => next !== null && next !== undefined ? next : previous;
+  const minute = numberValue(event.current_minute ?? event.time?.minute ?? event.minute);
+  const second = numberValue(event.current_second ?? event.time?.second ?? event.second);
+  const hasClock = minute !== null || second !== null;
   return {
     ...(current || {}),
     liveWebsocket: choose(event.live_websocket, current?.liveWebsocket),
     websocketPlus: choose(event.websocket_plus, current?.websocketPlus),
     homeScore: choose(numberValue(event.homeScore ?? event.score?.home ?? event.home_score), current?.homeScore),
     awayScore: choose(numberValue(event.awayScore ?? event.score?.away ?? event.away_score), current?.awayScore),
-    minute: choose(numberValue(event.current_minute ?? event.time?.minute ?? event.minute), current?.minute),
+    minute: choose(minute, current?.minute),
+    second: choose(second, current?.second),
+    clockDisplay: choose(event.time?.display ?? event.clock?.display, current?.clockDisplay),
+    period: choose(numberValue(event.time?.period ?? event.period), current?.period),
+    injuryTime: choose(numberValue(event.time?.injury_time ?? event.injury_time), current?.injuryTime),
+    clockUpdatedAt: hasClock ? Date.now() : current?.clockUpdatedAt,
     status: event.time?.status || event.status || current?.status,
     homeShotsOnTarget: choose(numberValue(home.shots_on_target), current?.homeShotsOnTarget),
     awayShotsOnTarget: choose(numberValue(away.shots_on_target), current?.awayShotsOnTarget),

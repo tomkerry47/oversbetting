@@ -17,6 +17,8 @@ export async function GET() {
         homeScore: parsed.homeScore,
         awayScore: parsed.awayScore,
         minute: parsed.minute,
+        second: parsed.second,
+        clockUpdatedAt: parsed.clockUpdatedAt,
         status: parsed.status,
         liveWebsocket: Boolean(event.live_websocket),
         websocketPlus: Boolean(event.websocket_plus),
@@ -34,4 +36,3 @@ export async function GET() {
     return NextResponse.json({ error: error?.message || 'Unable to load BSD live games' }, { status: 502 });
   }
 }
-

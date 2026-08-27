@@ -5,6 +5,7 @@ import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
 import LiveLineups from '@/components/LiveLineups';
+import LiveMatchClock from '@/components/LiveMatchClock';
 import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 type Pair = { home: number | null; away: number | null };
@@ -16,6 +17,8 @@ type Match = {
   homeScore: number | null;
   awayScore: number | null;
   minute: number | null;
+  second: number | null;
+  clockUpdatedAt: number;
   status: string;
   liveWebsocket: boolean;
   websocketPlus: boolean;
@@ -25,8 +28,6 @@ type DemoAlert = { id: string; matchId: number; title: string; detail: string };
 
 function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; detail: any; onClose: () => void; onMatchEvent: (event: any) => void }) {
   const stats = detail || match.stats || {};
-  const [replayEvent, setReplayEvent] = useState<any>(null);
-  const replayAvailable = Boolean(match.websocketPlus || detail?.websocketPlus);
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/90 p-0 backdrop-blur-sm sm:p-4" onMouseDown={onClose}>
       <div className="mx-auto flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden border-slate-600 bg-slate-900 shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:border" onMouseDown={(event) => event.stopPropagation()}>
@@ -36,9 +37,13 @@ function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; de
         </div>
         <div className="space-y-3 overflow-y-auto p-2 sm:space-y-4 sm:p-4">
           <section className="rounded-xl border border-slate-700 bg-slate-800/80 p-3 text-center shadow-lg sm:p-4">
-            <div className="text-xs text-slate-400">{match.league} · {detail?.minute ?? match.minute ?? '–'}&apos;</div>
+            <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+              <span>{match.league}</span>
+              <span aria-hidden="true">·</span>
+              <LiveMatchClock live={detail || match} fallbackStatus={match.status} className="font-bold text-emerald-400" />
+            </div>
             <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{match.homeTeam}</div><div className="text-4xl font-black text-white">{detail?.homeScore ?? match.homeScore ?? 0}–{detail?.awayScore ?? match.awayScore ?? 0}</div><div className="font-semibold text-white">{match.awayTeam}</div></div>
-            <LiveKeyEvents events={detail?.keyEvents} onReplay={replayAvailable ? setReplayEvent : undefined} />
+            <LiveKeyEvents events={detail?.keyEvents} />
           </section>
           <LivePitch
             detail={detail}
@@ -49,7 +54,6 @@ function MatchModal({ match, detail, onClose, onMatchEvent }: { match: Match; de
             matchStatus={detail?.status || match.status}
             homeTeam={match.homeTeam}
             awayTeam={match.awayTeam}
-            replayEvent={replayEvent}
           />
           <LiveStats stats={stats} />
           <LiveLineups endpoint={`/api/demolive/${match.id}/lineups`} events={detail?.keyEvents || []} />
@@ -136,7 +140,7 @@ export default function DemoLivePage() {
         <div className="grid gap-2 sm:grid-cols-2">
           {matches.map((match) => (
             <button key={match.id} onClick={() => setSelectedId(match.id)} className="rounded-xl border border-slate-700 bg-slate-800/50 p-3 text-left transition-colors hover:border-emerald-600 hover:bg-slate-800">
-              <div className="flex justify-between gap-2 text-[10px] text-slate-400"><span className="truncate">{match.league}</span><span>{match.minute != null ? `${match.minute}'` : match.status}</span></div>
+              <div className="flex justify-between gap-2 text-[10px] text-slate-400"><span className="truncate">{match.league}</span><LiveMatchClock live={match} fallbackStatus={match.status} className="font-bold text-emerald-400" /></div>
               <div className="mt-1 grid grid-cols-[1fr_auto] gap-2 text-sm text-white"><div><div>{match.homeTeam}</div><div>{match.awayTeam}</div></div><div className="text-right text-base font-bold"><div>{match.homeScore ?? '–'}</div><div>{match.awayScore ?? '–'}</div></div></div>
               <div className="mt-2 flex gap-1.5"><span className={`rounded px-1.5 py-0.5 text-[9px] ${match.websocketPlus ? 'bg-violet-500/20 text-violet-300' : 'bg-emerald-500/20 text-emerald-300'}`}>{match.websocketPlus ? 'WS+' : 'Basic'}</span><span className="ml-auto text-[10px] text-emerald-400">Open match →</span></div>
             </button>
