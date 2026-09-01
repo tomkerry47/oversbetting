@@ -15,6 +15,14 @@ type RoundQuery =
 const MANUAL_TRIGGER_ENRICH = false;
 const MANUAL_TRIGGER_ENRICH_ODDS = false;
 
+function sortRoundsChronologically(rounds: Week[]) {
+  return [...rounds].sort((left, right) =>
+    left.target_date.localeCompare(right.target_date) ||
+    left.target_kickoff_time.localeCompare(right.target_kickoff_time) ||
+    left.id - right.id
+  );
+}
+
 async function fetchJsonWithTimeout(url: string, init?: RequestInit, timeoutMs: number = 20000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -137,7 +145,7 @@ export default function HomePage() {
       // Only load active weeks within the next 6 days for the main-page navigation.
       const { response, data } = await fetchJsonWithTimeout('/api/weeks?upcoming=true', undefined, 20000);
       if (response.ok) {
-        setRounds(data.weeks || []);
+        setRounds(sortRoundsChronologically(data.weeks || []));
       }
     } catch {
       // ignore
@@ -295,7 +303,7 @@ export default function HomePage() {
 
   const handleNavigateRound = (direction: 'older' | 'newer') => {
     if (currentRoundIndex < 0) return;
-    const nextIndex = direction === 'older' ? currentRoundIndex + 1 : currentRoundIndex - 1;
+    const nextIndex = direction === 'older' ? currentRoundIndex - 1 : currentRoundIndex + 1;
     const nextRound = rounds[nextIndex];
     if (!nextRound) return;
 
@@ -432,7 +440,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePreviousWeek}
-                disabled={currentRoundIndex < 0 || currentRoundIndex >= rounds.length - 1}
+                disabled={currentRoundIndex <= 0}
                 className="text-xl disabled:opacity-30 disabled:cursor-not-allowed hover:scale-110 transition-transform"
                 title="Previous week"
               >
@@ -443,7 +451,7 @@ export default function HomePage() {
               </h1>
               <button
                 onClick={handleNextWeek}
-                disabled={currentRoundIndex <= 0}
+                disabled={currentRoundIndex < 0 || currentRoundIndex >= rounds.length - 1}
                 className="text-xl hover:scale-110 transition-transform"
                 title="Next week"
               >
