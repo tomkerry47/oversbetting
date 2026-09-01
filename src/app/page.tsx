@@ -49,6 +49,7 @@ export default function HomePage() {
   const [loadingMessage, setLoadingMessage] = useState('Loading fixtures...');
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, 1 = next week, etc.
   const [activeQuery, setActiveQuery] = useState<RoundQuery>({ mode: 'standard', weekOffset: 0 });
+  const [initialRoundSelected, setInitialRoundSelected] = useState(false);
   const [customDate, setCustomDate] = useState(getRelevantSaturday(0));
   const [customKickoffTime, setCustomKickoffTime] = useState('19:45');
   const [showCustomRoundMenu, setShowCustomRoundMenu] = useState(false);
@@ -145,11 +146,14 @@ export default function HomePage() {
       // Only load active weeks within the next 6 days for the main-page navigation.
       const { response, data } = await fetchJsonWithTimeout('/api/weeks?upcoming=true', undefined, 20000);
       if (response.ok) {
-        setRounds(sortRoundsChronologically(data.weeks || []));
+        const sortedRounds = sortRoundsChronologically(data.weeks || []);
+        setRounds(sortedRounds);
+        return sortedRounds;
       }
     } catch {
       // ignore
     }
+    return [];
   }, []);
 
   const hydrateRoundFromFixtures = useCallback(async (query: RoundQuery) => {
@@ -292,11 +296,27 @@ export default function HomePage() {
   }, [hydrateRoundFromFixtures, week]);
 
   useEffect(() => {
+    if (!initialRoundSelected) return;
     fetchData(activeQuery);
-  }, [fetchData, activeQuery]);
+  }, [fetchData, activeQuery, initialRoundSelected]);
 
   useEffect(() => {
-    loadRounds();
+    let cancelled = false;
+
+    const selectInitialRound = async () => {
+      const upcomingRounds = await loadRounds();
+      if (cancelled) return;
+
+      if (upcomingRounds[0]) {
+        setActiveQuery({ mode: 'existing', weekId: upcomingRounds[0].id });
+      }
+      setInitialRoundSelected(true);
+    };
+
+    selectInitialRound();
+    return () => {
+      cancelled = true;
+    };
   }, [loadRounds]);
 
   const currentRoundIndex = week ? rounds.findIndex((round) => round.id === week.id) : -1;
