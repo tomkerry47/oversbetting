@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import LiveMatchClock from '@/components/LiveMatchClock';
+import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 type LiveAlert = { id: string; fixtureId: string; title: string; detail: string };
 
@@ -40,7 +41,7 @@ function MatchCard({ row }: { row: any }) {
           )}
         </div>
         <div className="text-right shrink-0">
-          <LiveMatchClock live={row.live} fallbackStatus={fixture.match_status} className="mb-0.5 block text-xs font-bold text-emerald-400" />
+          <LiveMatchClock live={row.live} fallbackStatus={fixture.match_status} kickOff={fixture.kick_off} className="mb-0.5 block text-xs font-bold text-emerald-400" />
           <div className="text-2xl font-black text-white">{fixture.home_score ?? 0}–{fixture.away_score ?? 0}</div>
           <div className={goals >= 3 ? 'text-emerald-400 text-xs font-bold' : 'text-amber-300 text-xs'}>
             {goals >= 3 ? 'WON ✓' : `${Math.min(goals, 3)}/3 goals`}
@@ -115,6 +116,7 @@ export default function LivePage() {
               ...existing,
               ...row,
               fixture: { ...existing.fixture, ...row.fixture },
+              live: row.live ? mergeBsdLiveEvent(existing.live, row.live) : existing.live,
             } : row;
           }),
         };

@@ -80,7 +80,7 @@ export default function MatchCentrePage() {
           <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <span>{fixture.league_name}</span>
             <span aria-hidden="true">·</span>
-            <LiveMatchClock live={live} fallbackStatus={fixture.match_status} className="font-bold text-emerald-400" />
+            <LiveMatchClock live={live} fallbackStatus={fixture.match_status} kickOff={fixture.kick_off} className="font-bold text-emerald-400" />
           </div>
           {data?.pickedBy?.length > 0 && <div className="mt-1 text-xs font-semibold text-emerald-400">Picked by {data.pickedBy.join(', ')}</div>}
           <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4"><div className="font-semibold text-white">{fixture.home_team}</div><div className="text-4xl font-black text-white">{live?.homeScore ?? fixture.home_score ?? 0}–{live?.awayScore ?? fixture.away_score ?? 0}</div><div className="font-semibold text-white">{fixture.away_team}</div></div>

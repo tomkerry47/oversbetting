@@ -12,6 +12,7 @@ export function mergeBsdLiveEvent(current: any, payload: any) {
   const minute = numberValue(event.current_minute ?? event.time?.minute ?? event.minute);
   const second = numberValue(event.current_second ?? event.time?.second ?? event.second);
   const hasClock = minute !== null || second !== null;
+  const sameWholeMinute = minute !== null && minute === numberValue(current?.minute) && second === null;
   return {
     ...(current || {}),
     liveWebsocket: choose(event.live_websocket, current?.liveWebsocket),
@@ -23,7 +24,7 @@ export function mergeBsdLiveEvent(current: any, payload: any) {
     clockDisplay: choose(event.time?.display ?? event.clock?.display, current?.clockDisplay),
     period: choose(numberValue(event.time?.period ?? event.period), current?.period),
     injuryTime: choose(numberValue(event.time?.injury_time ?? event.injury_time), current?.injuryTime),
-    clockUpdatedAt: hasClock ? Date.now() : current?.clockUpdatedAt,
+    clockUpdatedAt: hasClock && !sameWholeMinute ? Date.now() : current?.clockUpdatedAt,
     status: event.time?.status || event.status || current?.status,
     homeShotsOnTarget: choose(numberValue(home.shots_on_target), current?.homeShotsOnTarget),
     awayShotsOnTarget: choose(numberValue(away.shots_on_target), current?.awayShotsOnTarget),
