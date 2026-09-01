@@ -55,6 +55,23 @@ function isSaturdayDateUniqueConstraintError(error: unknown): boolean {
   );
 }
 
+function isFixtureInCustomSlot(kickOff: unknown, targetDate: string, kickoffTime: string) {
+  const date = new Date(String(kickOff || ''));
+  if (!Number.isFinite(date.getTime())) return false;
+  const ukDate = date.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  const ukTime = date.toLocaleTimeString('en-GB', {
+    timeZone: 'Europe/London',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const toMinutes = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number);
+    return (hours * 60) + minutes;
+  };
+  return ukDate === targetDate && Math.abs(toMinutes(ukTime) - toMinutes(kickoffTime)) <= 15;
+}
+
 async function getOrCreateWeek(searchParams: URLSearchParams) {
   const round = parseRoundQuery(searchParams);
 
@@ -250,8 +267,13 @@ export async function GET(request: NextRequest) {
       .order('league_name', { ascending: true })
       .order('home_team', { ascending: true });
 
-    if (existingFixtures && existingFixtures.length > 0) {
-      return NextResponse.json({ week, fixtures: existingFixtures });
+    const visibleFixtures = round.isCustom
+      ? (existingFixtures || []).filter((fixture) =>
+          isFixtureInCustomSlot(fixture.kick_off, round.targetDate, round.kickoffTime))
+      : existingFixtures;
+
+    if (visibleFixtures && visibleFixtures.length > 0) {
+      return NextResponse.json({ week, fixtures: visibleFixtures });
     }
 
     // No fixtures in DB - return empty array
