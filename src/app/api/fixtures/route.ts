@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Fetching fixtures from API for ${round.targetDate} ${round.kickoffTime}`);
-    const apiFixtures = await fetchFixturesForSlot(round.targetDate, round.kickoffTime);
+    const apiFixtures = await fetchFixturesForSlot(round.targetDate, round.kickoffTime, round.isCustom ? 15 : 0);
     console.log(`API returned ${apiFixtures.length} fixtures`);
 
     const fixtureRows = apiFixtures.map((f) => ({

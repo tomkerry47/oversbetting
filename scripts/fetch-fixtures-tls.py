@@ -383,7 +383,17 @@ def fetch_scheduled_events(session: Any, date_iso: str) -> Dict[str, Any]:
     return sofa_get(session, f"/sport/football/scheduled-events/{date_iso}")
 
 
-def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "15:00:00") -> List[Dict[str, Any]]:
+def kickoff_is_within_window(actual: dt.datetime, target_time: str, window_minutes: int = 0) -> bool:
+    target = dt.datetime.combine(actual.date(), dt.time.fromisoformat(normalize_kickoff_time(target_time)))
+    target = target.replace(tzinfo=actual.tzinfo)
+    return abs((actual - target).total_seconds()) <= max(0, window_minutes) * 60
+
+
+def filter_and_map_fixtures(
+    events: List[Dict[str, Any]],
+    kickoff_time: str = "15:00:00",
+    kickoff_window_minutes: int = 0,
+) -> List[Dict[str, Any]]:
     allowed_ids = set(SOFASCORE_TOURNAMENTS.keys())
     rows: List[Dict[str, Any]] = []
     target_kickoff = normalize_kickoff_time(kickoff_time)[:5]
@@ -400,7 +410,7 @@ def filter_and_map_fixtures(events: List[Dict[str, Any]], kickoff_time: str = "1
             continue
         kickoff_utc = dt.datetime.fromtimestamp(start_timestamp, tz=dt.timezone.utc)
         kickoff_uk = kickoff_utc.astimezone(UK_TZ)
-        if kickoff_uk.strftime("%H:%M") != target_kickoff:
+        if not kickoff_is_within_window(kickoff_uk, target_kickoff, kickoff_window_minutes):
             continue
 
         home = event.get("homeTeam", {}) or {}
@@ -470,7 +480,12 @@ def _bsd_status(value: Any) -> str:
     return "NS"
 
 
-def fetch_bsd_fixtures(date_iso: str, kickoff_time: str, supported: Dict[str, int]) -> List[Dict[str, Any]]:
+def fetch_bsd_fixtures(
+    date_iso: str,
+    kickoff_time: str,
+    supported: Dict[str, int],
+    kickoff_window_minutes: int = 0,
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     target_kickoff = normalize_kickoff_time(kickoff_time)[:5]
     events: List[Dict[str, Any]] = []
@@ -496,7 +511,7 @@ def fetch_bsd_fixtures(date_iso: str, kickoff_time: str, supported: Dict[str, in
         kickoff_utc = dt.datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
         if kickoff_utc.tzinfo is None:
             kickoff_utc = kickoff_utc.replace(tzinfo=dt.timezone.utc)
-        if kickoff_utc.astimezone(UK_TZ).strftime("%H:%M") != target_kickoff:
+        if not kickoff_is_within_window(kickoff_utc.astimezone(UK_TZ), target_kickoff, kickoff_window_minutes):
             continue
         home = event.get("home_team")
         away = event.get("away_team")
@@ -1351,13 +1366,14 @@ def main() -> int:
     configure_rapidapi_budget(request_budget if use_rapidapi() else None)
     target_date = args.targetDate or get_relevant_saturday(week_offset)
     target_kickoff_time = normalize_kickoff_time(args.kickoffTime or "15:00:00")
+    kickoff_window_minutes = 15 if is_custom else 0
     saturday_date = get_saturday_for_target_date(target_date) if is_custom else get_relevant_saturday(week_offset)
     season = get_current_season()
     week_number = calculate_week_number(saturday_date)
     print(
         f"Fetching fixtures for target_date={target_date}, kickoff={target_kickoff_time}, "
         f"saturday={saturday_date}, weekOffset={week_offset}, isCustom={is_custom}, "
-        f"source={'RapidAPI' if use_rapidapi() else 'SofaScore direct'}, enrich={enrich}, "
+        f"window=±{kickoff_window_minutes}m, source={'RapidAPI' if use_rapidapi() else 'SofaScore direct'}, enrich={enrich}, "
         f"enrichOdds={enrich_odds}, bsdOnly={bsd_only}, requestBudget={request_budget if use_rapidapi() else 'unlimited'}"
     )
 
@@ -1367,7 +1383,12 @@ def main() -> int:
         "BSD currently supports tracked leagues: "
         + (", ".join(sorted(supported_bsd)) if supported_bsd else "none")
     )
-    bsd_rows = fetch_bsd_fixtures(target_date, target_kickoff_time, supported_bsd)
+    bsd_rows = fetch_bsd_fixtures(
+        target_date,
+        target_kickoff_time,
+        supported_bsd,
+        kickoff_window_minutes,
+    )
     if bsd_only:
         existing_week = supabase.find_week(season, week_number, is_custom)
         if not existing_week:
@@ -1384,7 +1405,11 @@ def main() -> int:
         tls_session_factory = get_tls_session()
         with tls_session_factory as tls_session:
             sofa_payload = fetch_scheduled_events(tls_session, target_date)
-            sofa_rows = filter_and_map_fixtures(sofa_payload.get("events", []), target_kickoff_time)
+            sofa_rows = filter_and_map_fixtures(
+                sofa_payload.get("events", []),
+                target_kickoff_time,
+                kickoff_window_minutes,
+            )
             # The catalogue is checked on every run. As BSD adds a tracked league,
             # its SofaScore fixtures disappear from this fallback automatically.
             # Only switch a league when BSD also supplies fixtures at the requested

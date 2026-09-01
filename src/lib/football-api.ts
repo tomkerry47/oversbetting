@@ -146,7 +146,15 @@ async function fetchRapidApiTournamentEvents(
  * Fetch all fixtures for `date` using RapidAPI's scheduled-events endpoint.
  * This keeps manual refreshes to one SofaScore data call before local filtering.
  */
-async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): Promise<APIFixture[]> {
+function isKickoffWithinWindow(actualTime: string, targetTime: string, windowMinutes: number) {
+  const toMinutes = (value: string) => {
+    const [hours, minutes] = value.split(':').map(Number);
+    return (hours * 60) + minutes;
+  };
+  return Math.abs(toMinutes(actualTime) - toMinutes(targetTime)) <= windowMinutes;
+}
+
+async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string, kickoffWindowMinutes = 0): Promise<APIFixture[]> {
   const targetKickoffTime = formatKickoffTimeLabel(kickoffTime);
   console.log(`[RapidAPI] Fetching fixtures for ${date} at ${targetKickoffTime}`);
 
@@ -176,7 +184,7 @@ async function fetchRapidApiFixturesForSlot(date: string, kickoffTime: string): 
       hour12: false,
     });
 
-    if (ukTime !== targetKickoffTime) continue;
+    if (!isKickoffWithinWindow(ukTime, targetKickoffTime, kickoffWindowMinutes)) continue;
 
     const leagueName = SOFASCORE_TOURNAMENTS[String(leagueId)]?.name || event.tournament?.uniqueTournament?.name || 'Unknown';
 
@@ -306,10 +314,10 @@ async function apiRequest(endpoint: string, retries = 3) {
  * When USE_RAPIDAPI=true and RAPIDAPI_KEY is set, uses the RapidAPI
  * `/tournaments/events` endpoint instead of the unofficial SofaScore API.
  */
-export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00'): Promise<APIFixture[]> {
+export async function fetchFixturesForSlot(date: string, kickoffTime: string = '15:00', kickoffWindowMinutes = 0): Promise<APIFixture[]> {
   if (shouldUseRapidApi()) {
     try {
-      return await fetchRapidApiFixturesForSlot(date, kickoffTime);
+      return await fetchRapidApiFixturesForSlot(date, kickoffTime, kickoffWindowMinutes);
     } catch (err) {
       console.error('[RapidAPI] fetchRapidApiFixturesForSlot failed, falling back to SofaScore:', err);
     }
@@ -353,7 +361,7 @@ export async function fetchFixturesForSlot(date: string, kickoffTime: string = '
       });
 
       // Only include matching UK kick-offs
-      if (ukTime !== targetKickoffTime) {
+      if (!isKickoffWithinWindow(ukTime, targetKickoffTime, kickoffWindowMinutes)) {
         continue;
       }
 
