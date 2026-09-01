@@ -118,6 +118,12 @@ export default function LivePage() {
           const existing: any = currentBySelection.get(row.id);
           if (!existing) return row;
           const hasAuthoritativeLiveScore = Boolean(row.live);
+          const persistedStatus = String(row.fixture?.match_status || '').toUpperCase();
+          const persistedLiveStatus = persistedStatus === 'FT'
+            ? 'finished'
+            : persistedStatus === 'HT'
+              ? 'halftime'
+              : null;
           return {
             ...existing,
             ...row,
@@ -127,7 +133,11 @@ export default function LivePage() {
               home_score: hasAuthoritativeLiveScore ? row.fixture.home_score : existing.fixture.home_score,
               away_score: hasAuthoritativeLiveScore ? row.fixture.away_score : existing.fixture.away_score,
             },
-            live: hasAuthoritativeLiveScore ? mergeBsdLiveEvent(existing.live, row.live) : existing.live,
+            live: hasAuthoritativeLiveScore
+              ? mergeBsdLiveEvent(existing.live, row.live)
+              : existing.live && persistedLiveStatus
+                ? { ...existing.live, status: persistedLiveStatus }
+                : existing.live,
           };
         });
         return {

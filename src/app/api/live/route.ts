@@ -70,12 +70,13 @@ export async function GET() {
       if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off)) {
         const socketEvent = socketMatches[Number(fixture.bsd_event_id)];
         live = socketEvent ? parseBsdMatch(socketEvent) : null;
+        if (live && fixture.match_status === 'FT') live = { ...live, status: 'finished' };
         if (live && !persistedFixtureIds.has(fixture.id)) {
           persistedFixtureIds.add(fixture.id);
           const stats = bsdMatchStatsSnapshot(live);
           const nextHomeScore = live.homeScore ?? fixture.home_score ?? 0;
           const nextAwayScore = live.awayScore ?? fixture.away_score ?? 0;
-          const nextStatus = shortStatus(live.status);
+          const nextStatus = fixture.match_status === 'FT' ? 'FT' : shortStatus(live.status);
           const scoreDue =
             Number(fixture.home_score ?? 0) !== Number(nextHomeScore) ||
             Number(fixture.away_score ?? 0) !== Number(nextAwayScore) ||

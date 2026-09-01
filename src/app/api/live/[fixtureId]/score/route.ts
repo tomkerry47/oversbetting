@@ -27,10 +27,11 @@ export async function GET(_request: NextRequest, { params }: { params: { fixture
       return NextResponse.json({ live: null, message: 'BSD live score unavailable.' });
     }
 
-    const live = await fetchBsdScore(Number(fixture.bsd_event_id));
+    let live = await fetchBsdScore(Number(fixture.bsd_event_id));
+    if (fixture.match_status === 'FT') live = { ...live, status: 'finished' };
     const homeScore = live.homeScore ?? fixture.home_score ?? 0;
     const awayScore = live.awayScore ?? fixture.away_score ?? 0;
-    const matchStatus = shortStatus(live.status);
+    const matchStatus = fixture.match_status === 'FT' ? 'FT' : shortStatus(live.status);
     const persistenceDue =
       Number(fixture.home_score ?? 0) !== Number(homeScore) ||
       Number(fixture.away_score ?? 0) !== Number(awayScore) ||

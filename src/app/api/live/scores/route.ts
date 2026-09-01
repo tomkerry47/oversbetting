@@ -54,11 +54,12 @@ export async function GET() {
     const matches = weekSelections.map((selection: any) => {
       const fixture = selection.fixture;
       const liveEvent = fixture?.bsd_event_id ? liveByEventId.get(Number(fixture.bsd_event_id)) : null;
-      const live = liveEvent ? parseBsdMatch(liveEvent) : null;
+      let live = liveEvent ? parseBsdMatch(liveEvent) : null;
+      if (live && fixture?.match_status === 'FT') live = { ...live, status: 'finished' };
       if (live) {
         const homeScore = live.homeScore ?? fixture?.home_score ?? 0;
         const awayScore = live.awayScore ?? fixture?.away_score ?? 0;
-        const matchStatus = shortStatus(live.status);
+        const matchStatus = fixture?.match_status === 'FT' ? 'FT' : shortStatus(live.status);
         if (
           Number(fixture?.home_score ?? 0) !== Number(homeScore) ||
           Number(fixture?.away_score ?? 0) !== Number(awayScore) ||
