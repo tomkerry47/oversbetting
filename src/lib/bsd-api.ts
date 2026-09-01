@@ -181,6 +181,15 @@ export function bsdMatchStatsSnapshot(match: any) {
     awayPossession: match.awayPossession ?? null,
     homeCorners: match.homeCorners ?? null,
     awayCorners: match.awayCorners ?? null,
+    homeBigChances: match.homeBigChances ?? null,
+    awayBigChances: match.awayBigChances ?? null,
+    homePassAccuracy: match.homePassAccuracy ?? null,
+    awayPassAccuracy: match.awayPassAccuracy ?? null,
+    homeFouls: match.homeFouls ?? null,
+    awayFouls: match.awayFouls ?? null,
+    homeHitWoodwork: match.homeHitWoodwork ?? null,
+    awayHitWoodwork: match.awayHitWoodwork ?? null,
+    xgEstimated: Boolean(match.xgEstimated),
   };
 }
 
@@ -194,10 +203,18 @@ export function hasBsdMatchStats(stats: any) {
   ].some((value) => value !== null && value !== undefined);
 }
 
-export async function fetchBsdMatch(eventId: number, includeTimeline = false) {
+export async function fetchBsdScore(eventId: number) {
+  return parseBsdMatch(await bsdRequest(`/events/${eventId}/`));
+}
+
+export async function fetchBsdStats(eventId: number) {
+  return parseBsdMatch({}, await bsdRequest(`/events/${eventId}/stats/`));
+}
+
+export async function fetchBsdMatch(eventId: number, includeTimeline = false, includeStats = true) {
   const [event, stats, incidents, socket] = await Promise.all([
     bsdRequest(`/events/${eventId}/`),
-    bsdRequest(`/events/${eventId}/stats/`).catch(() => ({})),
+    includeStats ? bsdRequest(`/events/${eventId}/stats/`).catch(() => ({})) : Promise.resolve({}),
     includeTimeline ? bsdRequest(`/events/${eventId}/incidents/`).catch(() => ({})) : Promise.resolve({}),
     includeTimeline ? fetchBsdSocketSnapshot(eventId).catch(() => ({ actions: [], event: null })) : Promise.resolve({ actions: [], event: null }),
   ]);
@@ -254,12 +271,12 @@ export function fetchBsdSocketSnapshot(eventId: number): Promise<{ actions: any[
   });
 }
 
-export function fetchBsdSocketMatches(eventIds: number[]): Promise<Record<number, any>> {
+function fetchBsdSocketMatchBatch(eventIds: number[]): Promise<Record<number, any>> {
   if (eventIds.length === 0) return Promise.resolve({});
   return new Promise((resolve) => {
     const socket = new WebSocket('wss://sports.bzzoiro.com/live/football/', ['token', token()]);
     const events: Record<number, any> = {};
-    const requested = eventIds.slice(0, 10);
+    const requested = eventIds;
     const completed = new Set<number>();
     let settled = false;
     const hardTimer = setTimeout(finish, 4000);
@@ -289,4 +306,14 @@ export function fetchBsdSocketMatches(eventIds: number[]): Promise<Record<number
     socket.on('error', finish);
     socket.on('close', finish);
   });
+}
+
+export async function fetchBsdSocketMatches(eventIds: number[]): Promise<Record<number, any>> {
+  const uniqueIds = Array.from(new Set(eventIds));
+  const batches: number[][] = [];
+  for (let index = 0; index < uniqueIds.length; index += 10) {
+    batches.push(uniqueIds.slice(index, index + 10));
+  }
+  const results = await Promise.all(batches.map(fetchBsdSocketMatchBatch));
+  return Object.assign({}, ...results);
 }

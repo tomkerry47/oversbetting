@@ -6,6 +6,7 @@ import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 const TEN_MINUTES = 10 * 60 * 1000;
+const ONE_MINUTE = 60 * 1000;
 const LIVE_ROUND_RETENTION_MS = 12 * 60 * 60 * 1000;
 
 function canBeLive(kickOff: string) {
@@ -59,6 +60,7 @@ export async function GET() {
     const socketMatches: Record<number, any> = await fetchBsdSocketMatches(
       Array.from(new Set<number>(bsdEventIds))
     ).catch(() => ({}));
+    const persistedFixtureIds = new Set<number>();
 
     const matches = await Promise.all(weekSelections.map(async (selection: any) => {
       const fixture = selection.fixture;
@@ -67,23 +69,42 @@ export async function GET() {
       if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off)) {
         const socketEvent = socketMatches[Number(fixture.bsd_event_id)];
         live = socketEvent ? parseBsdMatch(socketEvent) : null;
-        if (live) {
+        if (live && !persistedFixtureIds.has(fixture.id)) {
+          persistedFixtureIds.add(fixture.id);
           const stats = bsdMatchStatsSnapshot(live);
-          const update: Record<string, any> = {
-            home_score: live.homeScore,
-            away_score: live.awayScore,
-            match_status: shortStatus(live.status),
-            live_updated_at: new Date().toISOString(),
-          };
-          if (hasBsdMatchStats(stats)) {
+          const nextHomeScore = live.homeScore ?? fixture.home_score ?? 0;
+          const nextAwayScore = live.awayScore ?? fixture.away_score ?? 0;
+          const nextStatus = shortStatus(live.status);
+          const scoreDue =
+            Number(fixture.home_score ?? 0) !== Number(nextHomeScore) ||
+            Number(fixture.away_score ?? 0) !== Number(nextAwayScore) ||
+            fixture.match_status !== nextStatus ||
+            !fixture.live_updated_at ||
+            Date.now() - new Date(fixture.live_updated_at).getTime() >= ONE_MINUTE;
+          const statsDue =
+            !fixture.stats_updated_at ||
+            Date.now() - new Date(fixture.stats_updated_at).getTime() >= ONE_MINUTE;
+          const update: Record<string, any> = {};
+          if (scoreDue) {
+            update.home_score = nextHomeScore;
+            update.away_score = nextAwayScore;
+            update.match_status = nextStatus;
+            update.live_updated_at = new Date().toISOString();
+          }
+          if (statsDue && hasBsdMatchStats(stats)) {
             update.final_stats = stats;
             update.stats_updated_at = new Date().toISOString();
+            finalStats = stats;
           }
-          const updated = await supabase.from('fixtures').update(update).eq('id', fixture.id);
-          if (updated.error && update.final_stats) {
-            delete update.final_stats;
-            delete update.stats_updated_at;
-            await supabase.from('fixtures').update(update).eq('id', fixture.id);
+          if (Object.keys(update).length > 0) {
+            const updated = await supabase.from('fixtures').update(update).eq('id', fixture.id);
+            if (updated.error && update.final_stats) {
+              delete update.final_stats;
+              delete update.stats_updated_at;
+              if (Object.keys(update).length > 0) {
+                await supabase.from('fixtures').update(update).eq('id', fixture.id);
+              }
+            }
           }
         }
       } else if (fixture?.data_provider === 'bsd' && fixture.bsd_event_id && fixture.match_status === 'FT' && finalStats === null) {

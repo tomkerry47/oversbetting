@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import LiveKeyEvents from '@/components/LiveKeyEvents';
 import LivePitch from '@/components/LivePitch';
 import LiveStats from '@/components/LiveStats';
@@ -13,7 +13,10 @@ import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 export default function MatchCentrePage() {
   const { fixtureId } = useParams<{ fixtureId: string }>();
   const [data, setData] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
   const [error, setError] = useState('');
+  const scoreRequestInFlight = useRef(false);
+  const statsRequestInFlight = useRef(false);
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/live/${fixtureId}`, { cache: 'no-store' });
@@ -25,7 +28,46 @@ export default function MatchCentrePage() {
   const handleMatchEvent = useCallback((event: any) => {
     setData((current: any) => current ? { ...current, live: mergeBsdLiveEvent(current.live, event) } : current);
   }, []);
-  useEffect(() => { load(); const timer = window.setInterval(load, 10_000); return () => clearInterval(timer); }, [load]);
+  const loadScore = useCallback(async () => {
+    if (scoreRequestInFlight.current) return;
+    scoreRequestInFlight.current = true;
+    try {
+      const response = await fetch(`/api/live/${fixtureId}/score`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Score refresh failed');
+      if (body.live) handleMatchEvent(body.live);
+    } catch { /* The continuous live stream remains the primary score source. */ }
+    finally { scoreRequestInFlight.current = false; }
+  }, [fixtureId, handleMatchEvent]);
+  const loadStats = useCallback(async () => {
+    if (statsRequestInFlight.current) return;
+    statsRequestInFlight.current = true;
+    try {
+      const response = await fetch(`/api/live/${fixtureId}/stats`, { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Stats refresh failed');
+      if (body.stats) setStats(body.stats);
+    } catch { /* Keep the last good stats snapshot. */ }
+    finally { statsRequestInFlight.current = false; }
+  }, [fixtureId]);
+  useEffect(() => {
+    load();
+    loadStats();
+    const scoreTimer = window.setInterval(loadScore, 5_000);
+    const statsTimer = window.setInterval(loadStats, 60_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadScore();
+        loadStats();
+      }
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.clearInterval(scoreTimer);
+      window.clearInterval(statsTimer);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [load, loadScore, loadStats]);
 
   const fixture = data?.fixture;
   const live = data?.live;
@@ -54,7 +96,7 @@ export default function MatchCentrePage() {
           homeTeam={fixture.home_team}
           awayTeam={fixture.away_team}
         />
-        <LiveStats stats={live} />
+        <LiveStats stats={{ ...(live || {}), ...(stats || {}) }} />
         <LiveLineups endpoint={`/api/live/${fixtureId}/lineups`} events={live?.keyEvents || []} />
       </>}
     </main>

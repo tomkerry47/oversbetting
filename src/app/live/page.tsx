@@ -105,7 +105,7 @@ export default function LivePage() {
 
   useEffect(() => {
     load();
-    const timer = window.setInterval(load, 15_000);
+    const timer = window.setInterval(load, 5_000);
     const refreshWhenVisible = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
