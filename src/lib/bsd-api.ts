@@ -207,6 +207,12 @@ export async function fetchBsdScore(eventId: number) {
   return parseBsdMatch(await bsdRequest(`/events/${eventId}/`));
 }
 
+export async function fetchBsdLiveEvents() {
+  const payload = await bsdRequest('/events/live/');
+  const events = payload?.events || payload?.results || payload?.data || payload || [];
+  return Array.isArray(events) ? events : [];
+}
+
 export async function fetchBsdStats(eventId: number) {
   return parseBsdMatch({}, await bsdRequest(`/events/${eventId}/stats/`));
 }

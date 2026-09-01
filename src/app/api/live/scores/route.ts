@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchBsdSocketMatches, parseBsdMatch } from '@/lib/bsd-api';
+import { fetchBsdLiveEvents, parseBsdMatch } from '@/lib/bsd-api';
 import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 const LIVE_ROUND_RETENTION_MS = 12 * 60 * 60 * 1000;
-
-function canBeLive(kickOff: string) {
-  const delta = Date.now() - new Date(kickOff).getTime();
-  return delta >= -15 * 60 * 1000 && delta <= 4 * 60 * 60 * 1000;
-}
 
 export async function GET() {
   try {
@@ -41,16 +36,15 @@ export async function GET() {
       ? (selections || []).filter((selection: any) => selection.week_id === week.id)
       : [];
 
-    const eventIds = weekSelections
-      .map((selection: any) => selection.fixture)
-      .filter((fixture: any) => fixture?.data_provider === 'bsd' && fixture.bsd_event_id && canBeLive(fixture.kick_off))
-      .map((fixture: any) => Number(fixture.bsd_event_id));
-    const socketMatches: Record<number, any> = await fetchBsdSocketMatches(eventIds).catch(() => ({}));
+    const liveEvents = await fetchBsdLiveEvents().catch(() => []);
+    const liveByEventId = new Map<number, any>(
+      liveEvents.map((event: any) => [Number(event.id), event])
+    );
 
     const matches = weekSelections.map((selection: any) => {
       const fixture = selection.fixture;
-      const socketEvent = fixture?.bsd_event_id ? socketMatches[Number(fixture.bsd_event_id)] : null;
-      const live = socketEvent ? parseBsdMatch(socketEvent) : null;
+      const liveEvent = fixture?.bsd_event_id ? liveByEventId.get(Number(fixture.bsd_event_id)) : null;
+      const live = liveEvent ? parseBsdMatch(liveEvent) : null;
       return {
         ...selection,
         fixture: {
