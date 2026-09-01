@@ -303,8 +303,10 @@ function fetchBsdSocketMatchBatch(eventIds: number[]): Promise<Record<number, an
         if (eventId && message.type === 'event') events[eventId] = message.event || message.data || message;
         if (eventId && message.type === 'error') completed.add(eventId);
         if (completed.size >= requested.length) finish();
-        else if (message.type !== 'ping' && message.type !== 'pong') {
-          clearTimeout(finishTimer);
+        else if (!finishTimer && ['subscribed', 'event', 'error'].includes(message.type)) {
+          // Action frames can arrive continuously during play. Start one short
+          // collection window from the first snapshot response instead of
+          // waiting for the action stream to become idle.
           finishTimer = setTimeout(finish, 750);
         }
       } catch { /* Ignore non-JSON keepalive frames. */ }

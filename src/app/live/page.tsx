@@ -60,14 +60,17 @@ export default function LivePage() {
   const previousScores = useRef<Record<string, number>>({});
   const hasLoaded = useRef(false);
   const requestInFlight = useRef(false);
-  const load = useCallback(async () => {
+  const lastFullRefresh = useRef(0);
+  const load = useCallback(async (forceFull = false) => {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     setRefreshing(true);
     try {
-      const response = await fetch('/api/live', { cache: 'no-store' });
+      const fullRefresh = forceFull || !hasLoaded.current || Date.now() - lastFullRefresh.current >= 60_000;
+      const response = await fetch(fullRefresh ? '/api/live' : '/api/live/scores', { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Live refresh failed');
+      if (fullRefresh) lastFullRefresh.current = Date.now();
       const nextScores: Record<string, number> = {};
       for (const row of body.matches || []) {
         const fixture = row.fixture;
@@ -98,15 +101,33 @@ export default function LivePage() {
       }
       previousScores.current = nextScores;
       hasLoaded.current = true;
-      setData(body); setError('');
+      setData((current: any) => {
+        if (!body.scoreOnly || !current) return body;
+        const currentBySelection = new Map(
+          (current.matches || []).map((row: any) => [row.id, row])
+        );
+        return {
+          ...current,
+          ...body,
+          matches: (body.matches || []).map((row: any) => {
+            const existing: any = currentBySelection.get(row.id);
+            return existing ? {
+              ...existing,
+              ...row,
+              fixture: { ...existing.fixture, ...row.fixture },
+            } : row;
+          }),
+        };
+      });
+      setError('');
     } catch (cause: any) { setError(cause.message); }
     finally { setLoading(false); setRefreshing(false); requestInFlight.current = false; }
   }, []);
 
   useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 5_000);
-    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') load(); };
+    load(true);
+    const timer = window.setInterval(() => load(false), 5_000);
+    const refreshWhenVisible = () => { if (document.visibilityState === 'visible') load(false); };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
       window.clearInterval(timer);
@@ -133,7 +154,7 @@ export default function LivePage() {
             <h1 className="text-xl font-bold text-white">Live picks</h1>
             <button
               type="button"
-              onClick={load}
+              onClick={() => load(true)}
               disabled={refreshing}
               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-600 bg-slate-700/60 text-base text-slate-300 transition hover:text-white disabled:opacity-50"
               aria-label="Refresh live matches now"
