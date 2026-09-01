@@ -7,6 +7,14 @@ import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
 type LiveAlert = { id: string; fixtureId: string; title: string; detail: string };
 
+function isFinishedMatch(row: any) {
+  const status = String(row.live?.status || row.fixture?.match_status || '')
+    .toLowerCase()
+    .replaceAll('_', '')
+    .replaceAll(' ', '');
+  return ['finished', 'ft', 'ended'].includes(status);
+}
+
 function MatchCard({ row }: { row: any }) {
   const fixture = row.fixture;
   const storedStats = fixture.final_stats || {};
@@ -14,6 +22,7 @@ function MatchCard({ row }: { row: any }) {
   const goals = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
   const isBsd = fixture.data_provider === 'bsd';
   const status = String(row.live?.status || fixture.match_status || '').toLowerCase().replaceAll('_', '');
+  const isLost = isFinishedMatch(row) && goals < 3;
   const hasStarted = goals > 0 || [
     'live', 'inprogress', '1sthalf', '2ndhalf', 'halftime', 'paused',
     'extratime', 'penalties', 'finished', 'ft', 'ended',
@@ -43,8 +52,8 @@ function MatchCard({ row }: { row: any }) {
         <div className="text-right shrink-0">
           <LiveMatchClock live={row.live} fallbackStatus={fixture.match_status} kickOff={fixture.kick_off} className="mb-0.5 block text-xs font-bold text-emerald-400" />
           <div className="text-2xl font-black text-white">{fixture.home_score ?? 0}–{fixture.away_score ?? 0}</div>
-          <div className={goals >= 3 ? 'text-emerald-400 text-xs font-bold' : 'text-amber-300 text-xs'}>
-            {goals >= 3 ? 'WON ✓' : `${Math.min(goals, 3)}/3 goals`}
+          <div className={goals >= 3 ? 'text-emerald-400 text-xs font-bold' : isLost ? 'text-red-400 text-xs font-bold' : 'text-amber-300 text-xs'}>
+            {goals >= 3 ? 'WON ✓' : isLost ? 'LOST ✕' : `${Math.min(goals, 3)}/3 goals`}
           </div>
         </div>
       </div>
@@ -164,7 +173,12 @@ export default function LivePage() {
     };
   }, [load]);
 
-  const active = data.matches.filter((row: any) => Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0) < 3);
+  const active = data.matches.filter((row: any) =>
+    Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0) < 3 && !isFinishedMatch(row)
+  );
+  const lost = data.matches.filter((row: any) =>
+    Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0) < 3 && isFinishedMatch(row)
+  );
   const won = data.matches.filter((row: any) => Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0) >= 3);
   const percentage = Math.min(100, (Number(data.goals || 0) / 24) * 100);
 
@@ -211,6 +225,7 @@ export default function LivePage() {
       {loading ? <div className="text-center text-slate-400 py-12">Loading live matches…</div> : (
         <>
           <section className="space-y-1.5"><h2 className="pb-0.5 text-sm font-bold text-slate-200">In play / waiting ({active.length})</h2>{active.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>
+          {lost.length > 0 && <section className="space-y-1.5 pt-2 border-t border-red-900"><h2 className="pb-0.5 text-sm font-bold text-red-400">Lost ({lost.length})</h2>{lost.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>}
           {won.length > 0 && <section className="space-y-1.5 pt-2 border-t border-emerald-900"><h2 className="pb-0.5 text-sm font-bold text-emerald-400">Won ({won.length})</h2>{won.map((row: any) => <MatchCard key={row.id} row={row} />)}</section>}
           {data.matches.length === 0 && <div className="card text-center text-slate-400 py-10">No picks have been selected for the active round.</div>}
         </>
