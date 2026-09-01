@@ -92,6 +92,18 @@ function personName(value: any): string | null {
   return value?.name || value?.short_name || value?.display_name || null;
 }
 
+function bsdMatchStatus(event: any) {
+  const status = String(event.time?.status || event.status || event.match_status || '').toLowerCase().replaceAll('_', '');
+  const period = String(event.time?.period ?? event.period ?? '').toLowerCase().replaceAll('_', '');
+  if (['finished', 'ft', 'ended'].includes(status) || ['finished', 'ft'].includes(period)) return 'finished';
+  if (['halftime', 'ht'].includes(status) || ['halftime', 'ht'].includes(period)) return 'halftime';
+  if (['penalties', 'pens'].includes(status) || ['penalties', 'pens'].includes(period)) return 'penalties';
+  if (['extratime', 'et'].includes(status) || ['extratime', 'et'].includes(period)) return 'extratime';
+  if (['1sthalf', 'firsthalf', '1t'].includes(status) || ['1sthalf', 'firsthalf', '1t'].includes(period)) return '1sthalf';
+  if (['2ndhalf', 'secondhalf', '2t'].includes(status) || ['2ndhalf', 'secondhalf', '2t'].includes(period)) return '2ndhalf';
+  return status || 'notstarted';
+}
+
 export function parseBsdKeyEvents(incidentsPayload: any) {
   const raw = incidentsPayload?.incidents || incidentsPayload?.results || incidentsPayload?.data || incidentsPayload || [];
   if (!Array.isArray(raw)) return [];
@@ -136,7 +148,7 @@ export function parseBsdMatch(eventPayload: any, statsPayload?: any, incidentsPa
     websocketPlus: Boolean(event.websocket_plus),
     homeScore: numberAt(event, [['home_score'], ['score', 'home'], ['scores', 'home']]),
     awayScore: numberAt(event, [['away_score'], ['score', 'away'], ['scores', 'away']]),
-    status: event.status || event.match_status || event.time?.status || 'notstarted',
+    status: bsdMatchStatus(event),
     minute: numberAt(event, [['current_minute'], ['minute'], ['clock', 'minute'], ['time', 'minute']]),
     second: numberAt(event, [['current_second'], ['second'], ['clock', 'second'], ['time', 'second']]),
     clockDisplay: event.time?.display || event.clock?.display || null,

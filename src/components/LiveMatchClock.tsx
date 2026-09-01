@@ -24,16 +24,14 @@ export default function LiveMatchClock({ live, fallbackStatus, kickOff, classNam
   const isRunning = ['live', 'inprogress', '1sthalf', '2ndhalf', 'firsthalf', 'secondhalf', 'extratime'].includes(status);
   const kickOffAt = kickOff ? new Date(kickOff).getTime() : Number.NaN;
   const hasKickOff = Number.isFinite(kickOffAt);
-  const kickOffElapsed = hasKickOff ? Math.max(0, Math.floor((now - kickOffAt) / 1_000)) : 0;
   const isFutureKickOff = hasKickOff && now < kickOffAt;
-  const canUseKickOffClock = hasKickOff && !isFutureKickOff && kickOffElapsed <= 4 * 60 * 60;
 
   useEffect(() => {
     setNow(Date.now());
-    if (!(isRunning && hasMinute) && !hasKickOff) return;
+    if (!(isRunning && hasMinute && hasSecond) && !isFutureKickOff) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
-  }, [anchor, hasKickOff, hasMinute, isRunning, kickOffAt, minute, second]);
+  }, [anchor, hasMinute, hasSecond, isFutureKickOff, isRunning, kickOffAt, minute, second]);
 
   let label: string | null = null;
   if (['finished', 'ft', 'ended'].includes(status)) label = 'FT';
@@ -49,14 +47,13 @@ export default function LiveMatchClock({ live, fallbackStatus, kickOff, classNam
     });
   }
   else if (['postponed', 'pst'].includes(status)) label = 'PST';
-  else if (hasMinute) {
+  else if (hasMinute && hasSecond) {
     const elapsed = isRunning && Number.isFinite(anchor) ? Math.max(0, Math.floor((now - anchor) / 1_000)) : 0;
     const totalSeconds = Math.max(0, (minute * 60) + (hasSecond ? second : 0) + elapsed);
     label = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
-  } else if ((isRunning || ['notstarted', 'ns'].includes(status)) && canUseKickOffClock) {
-    label = `${Math.floor(kickOffElapsed / 60)}:${String(kickOffElapsed % 60).padStart(2, '0')}`;
-  } else if (isRunning) label = '0:00';
-  else if (['notstarted', 'ns'].includes(status)) label = '0:00';
+  } else if (hasMinute) label = `${minute}′`;
+  else if (isRunning) label = 'LIVE';
+  else if (['notstarted', 'ns'].includes(status)) label = 'NS';
 
   if (!label) return null;
   return <span className={`tabular-nums ${className}`}>{label}</span>;
