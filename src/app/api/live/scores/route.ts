@@ -6,6 +6,15 @@ import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 const LIVE_ROUND_RETENTION_MS = 12 * 60 * 60 * 1000;
 
+function shortStatus(value: unknown) {
+  const status = String(value || '').toLowerCase().replaceAll('_', '');
+  if (['finished', 'ft', 'ended'].includes(status)) return 'FT';
+  if (['halftime', 'ht'].includes(status)) return 'HT';
+  if (['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(status)) return 'LIVE';
+  if (['postponed', 'cancelled', 'canceled'].includes(status)) return 'PST';
+  return 'NS';
+}
+
 export async function GET() {
   try {
     const { startDate, endDate } = getActiveRoundWindow(8, 2);
@@ -40,11 +49,29 @@ export async function GET() {
     const liveByEventId = new Map<number, any>(
       liveEvents.map((event: any) => [Number(event.id), event])
     );
+    const fixtureUpdates = new Map<number, Record<string, any>>();
 
     const matches = weekSelections.map((selection: any) => {
       const fixture = selection.fixture;
       const liveEvent = fixture?.bsd_event_id ? liveByEventId.get(Number(fixture.bsd_event_id)) : null;
       const live = liveEvent ? parseBsdMatch(liveEvent) : null;
+      if (live) {
+        const homeScore = live.homeScore ?? fixture?.home_score ?? 0;
+        const awayScore = live.awayScore ?? fixture?.away_score ?? 0;
+        const matchStatus = shortStatus(live.status);
+        if (
+          Number(fixture?.home_score ?? 0) !== Number(homeScore) ||
+          Number(fixture?.away_score ?? 0) !== Number(awayScore) ||
+          fixture?.match_status !== matchStatus
+        ) {
+          fixtureUpdates.set(fixture.id, {
+            home_score: homeScore,
+            away_score: awayScore,
+            match_status: matchStatus,
+            live_updated_at: new Date().toISOString(),
+          });
+        }
+      }
       return {
         ...selection,
         fixture: {
@@ -55,6 +82,10 @@ export async function GET() {
         live,
       };
     });
+    await Promise.all(Array.from(fixtureUpdates.entries()).map(async ([fixtureId, update]) => {
+      const { error: updateError } = await supabase.from('fixtures').update(update).eq('id', fixtureId);
+      if (updateError) console.error(`[Live scores] Failed to persist fixture ${fixtureId}:`, updateError.message);
+    }));
     const goals = matches.reduce((sum: number, row: any) =>
       sum + Math.min(3, Number(row.fixture?.home_score || 0) + Number(row.fixture?.away_score || 0)), 0);
 

@@ -59,6 +59,7 @@ export default function LivePage() {
   const [error, setError] = useState('');
   const [alerts, setAlerts] = useState<LiveAlert[]>([]);
   const previousScores = useRef<Record<string, number>>({});
+  const wonFixtures = useRef<Set<string>>(new Set());
   const hasLoaded = useRef(false);
   const requestInFlight = useRef(false);
   const lastFullRefresh = useRef(0);
@@ -73,13 +74,18 @@ export default function LivePage() {
       if (!response.ok) throw new Error(body.error || 'Live refresh failed');
       if (fullRefresh) lastFullRefresh.current = Date.now();
       const nextScores: Record<string, number> = {};
+      const processedFixtures = new Set<string>();
       for (const row of body.matches || []) {
         const fixture = row.fixture;
         const fixtureId = String(fixture.id);
-        const score = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
-        nextScores[fixtureId] = score;
+        const receivedScore = Number(fixture.home_score || 0) + Number(fixture.away_score || 0);
         const previous = previousScores.current[fixtureId];
-        if (hasLoaded.current && fixture.data_provider === 'bsd' && previous != null && score > previous) {
+        const score = row.live || previous == null ? receivedScore : previous;
+        nextScores[fixtureId] = score;
+        if (processedFixtures.has(fixtureId)) continue;
+        processedFixtures.add(fixtureId);
+        const alreadyWon = wonFixtures.current.has(fixtureId) || Number(previous) >= 3;
+        if (hasLoaded.current && !alreadyWon && fixture.data_provider === 'bsd' && previous != null && score > previous) {
           let scorer = 'Goal scored';
           let minute = row.live?.minute != null ? `${row.live.minute}′` : 'Live';
           try {
@@ -99,26 +105,37 @@ export default function LivePage() {
           }]);
           window.setTimeout(() => setAlerts((current) => current.filter((alert) => alert.id !== alertId)), 15_000);
         }
+        if (score >= 3) wonFixtures.current.add(fixtureId);
       }
       previousScores.current = nextScores;
       hasLoaded.current = true;
       setData((current: any) => {
-        if (!body.scoreOnly || !current) return body;
+        if (!current || (current.matches || []).length === 0) return body;
         const currentBySelection = new Map(
           (current.matches || []).map((row: any) => [row.id, row])
         );
+        const matches = (body.matches || []).map((row: any) => {
+          const existing: any = currentBySelection.get(row.id);
+          if (!existing) return row;
+          const hasAuthoritativeLiveScore = Boolean(row.live);
+          return {
+            ...existing,
+            ...row,
+            fixture: {
+              ...existing.fixture,
+              ...row.fixture,
+              home_score: hasAuthoritativeLiveScore ? row.fixture.home_score : existing.fixture.home_score,
+              away_score: hasAuthoritativeLiveScore ? row.fixture.away_score : existing.fixture.away_score,
+            },
+            live: hasAuthoritativeLiveScore ? mergeBsdLiveEvent(existing.live, row.live) : existing.live,
+          };
+        });
         return {
           ...current,
           ...body,
-          matches: (body.matches || []).map((row: any) => {
-            const existing: any = currentBySelection.get(row.id);
-            return existing ? {
-              ...existing,
-              ...row,
-              fixture: { ...existing.fixture, ...row.fixture },
-              live: row.live ? mergeBsdLiveEvent(existing.live, row.live) : existing.live,
-            } : row;
-          }),
+          matches,
+          goals: matches.reduce((sum: number, row: any) =>
+            sum + Math.min(3, Number(row.fixture?.home_score || 0) + Number(row.fixture?.away_score || 0)), 0),
         };
       });
       setError('');
@@ -144,11 +161,22 @@ export default function LivePage() {
   return (
     <main className="mx-auto max-w-2xl space-y-5 px-0 py-5 pb-24">
       <div className="fixed right-3 top-3 z-[90] w-[min(24rem,calc(100vw-1.5rem))] space-y-2" aria-live="polite">
-        {alerts.map((alert) => <Link key={alert.id} href={`/live/${alert.fixtureId}`} className="block rounded-xl border border-emerald-500/60 bg-slate-900 p-3 shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800">
-          <div className="text-sm font-bold text-white">{alert.title}</div>
-          <div className="mt-1 text-xs text-emerald-300">{alert.detail}</div>
-          <div className="mt-2 text-[10px] uppercase tracking-wide text-slate-400">Click to open match →</div>
-        </Link>)}
+        {alerts.map((alert) => <div key={alert.id} className="relative rounded-xl border border-emerald-500/60 bg-slate-900 shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800">
+          <Link href={`/live/${alert.fixtureId}`} className="block p-3 pr-10">
+            <div className="text-sm font-bold text-white">{alert.title}</div>
+            <div className="mt-1 text-xs text-emerald-300">{alert.detail}</div>
+            <div className="mt-2 text-[10px] uppercase tracking-wide text-slate-400">Click to open match →</div>
+          </Link>
+          <button
+            type="button"
+            onClick={() => setAlerts((current) => current.filter((currentAlert) => currentAlert.id !== alert.id))}
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full text-sm text-slate-400 transition hover:bg-slate-700 hover:text-white"
+            aria-label={`Dismiss ${alert.title} notification`}
+            title="Dismiss notification"
+          >
+            ×
+          </button>
+        </div>)}
       </div>
       <section className="card overflow-hidden">
         <div className="flex items-end justify-between gap-3">

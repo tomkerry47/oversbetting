@@ -17,6 +17,7 @@ function canBeLive(kickOff: string) {
 function shortStatus(value: unknown) {
   const status = String(value || '').toLowerCase().replaceAll('_', '');
   if (['finished', 'ft', 'ended'].includes(status)) return 'FT';
+  if (['halftime', 'ht'].includes(status)) return 'HT';
   if (['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(status)) return 'LIVE';
   if (['postponed', 'cancelled', 'canceled'].includes(status)) return 'PST';
   return 'NS';
