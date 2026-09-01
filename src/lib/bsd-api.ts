@@ -279,11 +279,13 @@ function fetchBsdSocketMatchBatch(eventIds: number[]): Promise<Record<number, an
     const requested = eventIds;
     const completed = new Set<number>();
     let settled = false;
+    let finishTimer: NodeJS.Timeout | undefined;
     const hardTimer = setTimeout(finish, 4000);
     function finish() {
       if (settled) return;
       settled = true;
       clearTimeout(hardTimer);
+      if (finishTimer) clearTimeout(finishTimer);
       socket.close();
       resolve(events);
     }
@@ -301,6 +303,10 @@ function fetchBsdSocketMatchBatch(eventIds: number[]): Promise<Record<number, an
         if (eventId && message.type === 'event') events[eventId] = message.event || message.data || message;
         if (eventId && message.type === 'error') completed.add(eventId);
         if (completed.size >= requested.length) finish();
+        else if (message.type !== 'ping' && message.type !== 'pong') {
+          clearTimeout(finishTimer);
+          finishTimer = setTimeout(finish, 750);
+        }
       } catch { /* Ignore non-JSON keepalive frames. */ }
     });
     socket.on('error', finish);
