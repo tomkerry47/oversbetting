@@ -52,6 +52,8 @@ The webhook sends this JSON structure:
   "players_submitted": 4,
   "average_odds": 1.82,
   "odds_count": 8,
+  "stake_amount": 5,
+  "average_stake_return": 9.10,
   "summary": {
     "Kezza": [
       {
@@ -84,6 +86,7 @@ You can format the message in Apple Shortcuts like this:
 
 📅 Saturday: [saturday_date]
 📈 Average O2.5 odds: [average_odds]
+💷 £5 return at average odds: [average_stake_return]
 
 ⚽️ Picks:
 

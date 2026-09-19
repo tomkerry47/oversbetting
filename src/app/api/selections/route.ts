@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 import { toLeagueCode } from '@/lib/utils';
-import { calculateAverageOver25Odds } from '@/lib/odds';
+import { calculateAverageOver25Odds, calculateStakeReturn, DEFAULT_BET_STAKE } from '@/lib/odds';
 
 /**
  * GET /api/selections - Get all selections for the current active week.
@@ -228,6 +228,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
 
     const selectionsWithFixtures = fullSelections || [];
     const { averageOdds, oddsCount } = calculateAverageOver25Odds(selectionsWithFixtures);
+    const averageStakeReturn = calculateStakeReturn(averageOdds);
 
     const payload = {
       event: 'selections_complete',
@@ -240,6 +241,8 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
       players_submitted: PLAYERS.length,
       average_odds: averageOdds,
       odds_count: oddsCount,
+      stake_amount: DEFAULT_BET_STAKE,
+      average_stake_return: averageStakeReturn,
       selections: selectionsWithFixtures,
       summary: selectionsWithFixtures.reduce((acc: any, sel: any) => {
         if (!acc[sel.player_name]) {
@@ -265,6 +268,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
     messageLines.push(`📅 Round: ${new Date(week.target_date).toLocaleDateString('en-GB')} ${String(week.target_kickoff_time).slice(0, 5)}`);
     if (averageOdds !== null) {
       messageLines.push(`📈 Average O2.5 odds: ${averageOdds.toFixed(2)} (${oddsCount}/${selectionsWithFixtures.length} priced)`);
+      messageLines.push(`💷 £${DEFAULT_BET_STAKE} return at average odds: £${averageStakeReturn?.toFixed(2)}`);
     }
     messageLines.push('');
     messageLines.push('⚽ Picks:');

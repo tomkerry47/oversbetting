@@ -10,6 +10,12 @@ type HistoryWeek = Week & {
   goals_recorded: number;
   average_odds: number | null;
   odds_recorded: number;
+  stake_amount: number;
+  average_stake_return: number | null;
+  settled_bets: number;
+  total_staked: number;
+  total_return: number;
+  profit_loss: number;
 };
 
 type MatchStats = {
@@ -186,6 +192,11 @@ export default function HistoryPage() {
     }
   };
 
+  const settledBets = weeks.reduce((total, week) => total + week.settled_bets, 0);
+  const totalStaked = weeks.reduce((total, week) => total + week.total_staked, 0);
+  const totalReturn = weeks.reduce((total, week) => total + week.total_return, 0);
+  const totalProfitLoss = Number((totalReturn - totalStaked).toFixed(2));
+
   return (
     <div className="space-y-4">
       <div className="card">
@@ -197,6 +208,24 @@ export default function HistoryPage() {
           <p className="text-red-400 text-xs mt-2">❌ {checkError}</p>
         )}
       </div>
+
+      <section className="card" aria-label="Betting profit and loss">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">£5 singles profit / loss</p>
+            <p className={`mt-1 text-2xl font-black ${totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {totalProfitLoss >= 0 ? '+' : '-'}£{Math.abs(totalProfitLoss).toFixed(2)}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-1 text-right text-xs">
+            <span className="text-slate-500">Staked</span>
+            <span className="font-semibold text-white">£{totalStaked.toFixed(2)}</span>
+            <span className="text-slate-500">Returned</span>
+            <span className="font-semibold text-white">£{totalReturn.toFixed(2)}</span>
+          </div>
+        </div>
+        <p className="mt-2 text-[10px] text-slate-500">Based on {settledBets} settled, priced selections. Pending and unpriced matches are excluded.</p>
+      </section>
 
       {weeks.length === 0 ? (
         <div className="card text-center py-10">
@@ -247,6 +276,7 @@ export default function HistoryPage() {
                             title={`${week.odds_recorded} priced selection${week.odds_recorded === 1 ? '' : 's'}`}
                           >
                             📈 {week.average_odds.toFixed(2)} avg odds
+                            {week.average_stake_return !== null && ` • £${week.stake_amount} → £${week.average_stake_return.toFixed(2)}`}
                           </span>
                         )}
                       </h3>

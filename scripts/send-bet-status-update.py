@@ -20,6 +20,7 @@ import requests
 
 
 UK_TZ = ZoneInfo("Europe/London")
+DEFAULT_BET_STAKE = 5.0
 
 
 def to_decimal_odds(value: Any) -> float | None:
@@ -219,12 +220,14 @@ def main() -> int:
         )
 
     average_odds = round(sum(decimal_odds) / len(decimal_odds), 2) if decimal_odds else None
+    average_stake_return = round(average_odds * DEFAULT_BET_STAKE, 2) if average_odds is not None else None
 
     lines: List[str] = []
     lines.append(f"📣 Week {week.get('week_number')} status update")
     lines.append(f"📅 {week.get('saturday_date')}")
     if average_odds is not None:
         lines.append(f"📈 Average O2.5 odds: {average_odds:.2f} ({len(decimal_odds)}/{len(selections)} priced)")
+        lines.append(f"💷 £{DEFAULT_BET_STAKE:.0f} return at average odds: £{average_stake_return:.2f}")
     lines.append("")
     for player_name in sorted(by_player.keys()):
         p = by_player[player_name]
@@ -251,6 +254,8 @@ def main() -> int:
         "players_submitted": len(summary.keys()),
         "average_odds": average_odds,
         "odds_count": len(decimal_odds),
+        "stake_amount": DEFAULT_BET_STAKE,
+        "average_stake_return": average_stake_return,
         "selections": selections_payload,
         "week": {
             "id": week.get("id"),

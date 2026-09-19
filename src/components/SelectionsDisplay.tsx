@@ -2,7 +2,7 @@
 
 import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS } from '@/types';
 import { formatSelectionsForCopy } from '@/lib/utils';
-import { calculateAverageOver25Odds } from '@/lib/odds';
+import { calculateAverageOver25Odds, calculateStakeReturn, DEFAULT_BET_STAKE } from '@/lib/odds';
 import { FixtureDetails, FixtureInsights } from '@/components/FixtureSelector';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -107,6 +107,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
   const waitingPlayers = PLAYERS.filter((player) => !grouped[player]?.length);
   const totalPicks = PLAYERS.length * MAX_SELECTIONS_PER_PLAYER;
   const { averageOdds, oddsCount } = calculateAverageOver25Odds(selections);
+  const averageStakeReturn = calculateStakeReturn(averageOdds);
 
   return (
     <section className="card overflow-hidden !p-0">
@@ -122,6 +123,9 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
               {averageOdds !== null && (
                 <span title={`${oddsCount}/${selections.length} selections priced`}>
                   {' '}• Avg O2.5 odds <span className="font-semibold text-violet-300">{averageOdds.toFixed(2)}</span>
+                  {averageStakeReturn !== null && (
+                    <span className="font-semibold text-emerald-300"> • £{DEFAULT_BET_STAKE} → £{averageStakeReturn.toFixed(2)}</span>
+                  )}
                 </span>
               )}
             </p>

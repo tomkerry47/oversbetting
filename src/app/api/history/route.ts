@@ -3,11 +3,17 @@ import { supabase } from '@/lib/supabase';
 import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
 import { getActiveRoundWindow } from '@/lib/utils';
 import { GOAL_THRESHOLD, Week } from '@/types';
-import { calculateAverageOver25Odds } from '@/lib/odds';
+import {
+  calculateAverageOver25Odds,
+  calculateProfitLoss,
+  calculateStakeReturn,
+  DEFAULT_BET_STAKE,
+} from '@/lib/odds';
 
 type SelectionGoal = {
   week_id: number;
   total_goals: number | null;
+  result?: 'pending' | 'won' | 'lost';
   fixture?: {
     odds_over_25?: string | null;
   } | Array<{
@@ -21,6 +27,8 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
     (selection) => selection.total_goals !== null && selection.total_goals !== undefined
   );
   const { averageOdds, oddsCount } = calculateAverageOver25Odds(weekSelections);
+  const averageStakeReturn = calculateStakeReturn(averageOdds);
+  const profitLoss = calculateProfitLoss(weekSelections);
 
   return {
     ...week,
@@ -35,6 +43,12 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
     goals_recorded: recordedSelections.length,
     average_odds: averageOdds,
     odds_recorded: oddsCount,
+    stake_amount: DEFAULT_BET_STAKE,
+    average_stake_return: averageStakeReturn,
+    settled_bets: profitLoss.settledBets,
+    total_staked: profitLoss.totalStaked,
+    total_return: profitLoss.totalReturn,
+    profit_loss: profitLoss.profitLoss,
   };
 }
 
@@ -43,7 +57,7 @@ async function addGoalSummaries(weeks: Week[]) {
 
   const { data: selections, error } = await supabase
     .from('selections')
-    .select('week_id,total_goals,fixture:fixtures(odds_over_25)')
+    .select('week_id,total_goals,result,fixture:fixtures(odds_over_25)')
     .in('week_id', weeks.map((week) => week.id));
 
   if (error) throw error;
