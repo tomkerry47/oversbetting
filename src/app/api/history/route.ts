@@ -3,10 +3,16 @@ import { supabase } from '@/lib/supabase';
 import { normalizeWeek, normalizeWeeks, isMissingWeekColumnError } from '@/lib/week-compat';
 import { getActiveRoundWindow } from '@/lib/utils';
 import { GOAL_THRESHOLD, Week } from '@/types';
+import { calculateAverageOver25Odds } from '@/lib/odds';
 
 type SelectionGoal = {
   week_id: number;
   total_goals: number | null;
+  fixture?: {
+    odds_over_25?: string | null;
+  } | Array<{
+    odds_over_25?: string | null;
+  }> | null;
 };
 
 function addGoalSummary(week: Week, selections: SelectionGoal[]) {
@@ -14,6 +20,7 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
   const recordedSelections = weekSelections.filter(
     (selection) => selection.total_goals !== null && selection.total_goals !== undefined
   );
+  const { averageOdds, oddsCount } = calculateAverageOver25Odds(weekSelections);
 
   return {
     ...week,
@@ -26,6 +33,8 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
     ),
     goals_target: weekSelections.length * (GOAL_THRESHOLD + 1),
     goals_recorded: recordedSelections.length,
+    average_odds: averageOdds,
+    odds_recorded: oddsCount,
   };
 }
 
@@ -34,7 +43,7 @@ async function addGoalSummaries(weeks: Week[]) {
 
   const { data: selections, error } = await supabase
     .from('selections')
-    .select('week_id,total_goals')
+    .select('week_id,total_goals,fixture:fixtures(odds_over_25)')
     .in('week_id', weeks.map((week) => week.id));
 
   if (error) throw error;

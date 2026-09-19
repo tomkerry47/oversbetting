@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 import { toLeagueCode } from '@/lib/utils';
+import { calculateAverageOver25Odds } from '@/lib/odds';
 
 /**
  * GET /api/selections - Get all selections for the current active week.
@@ -225,6 +226,9 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
       .eq('week_id', weekId)
       .order('player_name', { ascending: true });
 
+    const selectionsWithFixtures = fullSelections || [];
+    const { averageOdds, oddsCount } = calculateAverageOver25Odds(selectionsWithFixtures);
+
     const payload = {
       event: 'selections_complete',
       week_id: weekId,
@@ -234,8 +238,10 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
       is_custom: week.is_custom,
       total_selections: selections.length,
       players_submitted: PLAYERS.length,
-      selections: fullSelections,
-      summary: fullSelections?.reduce((acc: any, sel: any) => {
+      average_odds: averageOdds,
+      odds_count: oddsCount,
+      selections: selectionsWithFixtures,
+      summary: selectionsWithFixtures.reduce((acc: any, sel: any) => {
         if (!acc[sel.player_name]) {
           acc[sel.player_name] = [];
         }
@@ -246,6 +252,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
           league_name: sel.fixture.league_name,
           league_code: toLeagueCode(sel.fixture.league_name),
           kick_off: sel.fixture.kick_off,
+          odds_over_25: sel.fixture.odds_over_25,
         });
         return acc;
       }, {}),
@@ -256,6 +263,9 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
     messageLines.push('🎲 All Selections In! 🎲');
     messageLines.push('');
     messageLines.push(`📅 Round: ${new Date(week.target_date).toLocaleDateString('en-GB')} ${String(week.target_kickoff_time).slice(0, 5)}`);
+    if (averageOdds !== null) {
+      messageLines.push(`📈 Average O2.5 odds: ${averageOdds.toFixed(2)} (${oddsCount}/${selectionsWithFixtures.length} priced)`);
+    }
     messageLines.push('');
     messageLines.push('⚽ Picks:');
     messageLines.push('');

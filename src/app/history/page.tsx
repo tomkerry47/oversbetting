@@ -8,6 +8,8 @@ type HistoryWeek = Week & {
   goals_scored: number;
   goals_target: number;
   goals_recorded: number;
+  average_odds: number | null;
+  odds_recorded: number;
 };
 
 type MatchStats = {
@@ -237,6 +239,14 @@ export default function HistoryPage() {
                             ⚽ {week.goals_recorded === 0
                               ? 'Goals pending'
                               : `${week.goals_scored}/${week.goals_target} goals`}
+                          </span>
+                        )}
+                        {week.average_odds !== null && (
+                          <span
+                            className="ml-2 text-xs text-violet-300"
+                            title={`${week.odds_recorded} priced selection${week.odds_recorded === 1 ? '' : 's'}`}
+                          >
+                            📈 {week.average_odds.toFixed(2)} avg odds
                           </span>
                         )}
                       </h3>

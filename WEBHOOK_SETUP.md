@@ -50,17 +50,21 @@ The webhook sends this JSON structure:
   "saturday_date": "2026-02-08",
   "total_selections": 8,
   "players_submitted": 4,
+  "average_odds": 1.82,
+  "odds_count": 8,
   "summary": {
     "Kezza": [
       {
         "home_team": "Arsenal",
         "away_team": "Chelsea",
-        "kick_off": "2026-02-08T15:00:00Z"
+        "kick_off": "2026-02-08T15:00:00Z",
+        "odds_over_25": "1.80"
       },
       {
         "home_team": "Liverpool",
         "away_team": "Man City",
-        "kick_off": "2026-02-08T15:00:00Z"
+        "kick_off": "2026-02-08T15:00:00Z",
+        "odds_over_25": "1.84"
       }
     ],
     "Mikey": [...],
@@ -79,6 +83,7 @@ You can format the message in Apple Shortcuts like this:
 🎲 All Selections In! 🎲
 
 📅 Saturday: [saturday_date]
+📈 Average O2.5 odds: [average_odds]
 
 ⚽️ Picks:
 

@@ -2,6 +2,7 @@
 
 import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS } from '@/types';
 import { formatSelectionsForCopy } from '@/lib/utils';
+import { calculateAverageOver25Odds } from '@/lib/odds';
 import { FixtureDetails, FixtureInsights } from '@/components/FixtureSelector';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -105,6 +106,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
   const submittedPlayers = PLAYERS.filter((player) => grouped[player]?.length > 0);
   const waitingPlayers = PLAYERS.filter((player) => !grouped[player]?.length);
   const totalPicks = PLAYERS.length * MAX_SELECTIONS_PER_PLAYER;
+  const { averageOdds, oddsCount } = calculateAverageOver25Odds(selections);
 
   return (
     <section className="card overflow-hidden !p-0">
@@ -115,7 +117,14 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-white sm:text-base">This Week&apos;s Picks</h3>
-            <p className="mt-0.5 text-[10px] text-slate-400">{selections.length}/{totalPicks} selections locked in</p>
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              {selections.length}/{totalPicks} selections locked in
+              {averageOdds !== null && (
+                <span title={`${oddsCount}/${selections.length} selections priced`}>
+                  {' '}• Avg O2.5 odds <span className="font-semibold text-violet-300">{averageOdds.toFixed(2)}</span>
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <button onClick={handleCopy} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-700/60 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-700 active:scale-[.97]" aria-live="polite">

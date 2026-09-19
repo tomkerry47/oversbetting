@@ -22,6 +22,30 @@ import requests
 UK_TZ = ZoneInfo("Europe/London")
 
 
+def to_decimal_odds(value: Any) -> float | None:
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw or raw.upper() == "N/A":
+        return None
+
+    try:
+        if "/" in raw:
+            numerator_raw, denominator_raw = raw.split("/", 1)
+            numerator = float(numerator_raw)
+            denominator = float(denominator_raw)
+            if denominator == 0:
+                return None
+            decimal_odds = 1 + numerator / denominator
+        else:
+            decimal_odds = float(raw)
+    except (TypeError, ValueError):
+        return None
+
+    return decimal_odds if decimal_odds > 1 else None
+
+
 def to_league_code(league_name_raw: Any) -> str:
     league_name = str(league_name_raw or "").strip()
     known_codes = {
@@ -133,6 +157,7 @@ def main() -> int:
     by_player: Dict[str, Dict[str, Any]] = {}
     summary: Dict[str, List[Dict[str, Any]]] = {}
     selections_payload: List[Dict[str, Any]] = []
+    decimal_odds: List[float] = []
     for sel in selections:
         name = sel["player_name"]
         if name not in by_player:
@@ -149,6 +174,9 @@ def main() -> int:
             by_player[name]["pending"] += 1
 
         fixture = sel.get("fixture") or {}
+        fixture_odds = to_decimal_odds(fixture.get("odds_over_25"))
+        if fixture_odds is not None:
+            decimal_odds.append(fixture_odds)
         league_name = fixture.get("league_name")
         league_code = to_league_code(league_name)
         fixture_label = f"{'⭐ ' if fixture.get('is_star_pick') else ''}{fixture.get('home_team')} vs {fixture.get('away_team')} ({league_code})"
@@ -164,6 +192,7 @@ def main() -> int:
                 "score": score_text,
                 "status": fixture.get("match_status"),
                 "result": result,
+                "odds_over_25": fixture.get("odds_over_25"),
             }
         )
         summary[name].append(
@@ -177,6 +206,7 @@ def main() -> int:
                 "score": score_text,
                 "status": fixture.get("match_status"),
                 "result": result,
+                "odds_over_25": fixture.get("odds_over_25"),
             }
         )
         selections_payload.append(
@@ -188,9 +218,13 @@ def main() -> int:
             }
         )
 
+    average_odds = round(sum(decimal_odds) / len(decimal_odds), 2) if decimal_odds else None
+
     lines: List[str] = []
     lines.append(f"📣 Week {week.get('week_number')} status update")
     lines.append(f"📅 {week.get('saturday_date')}")
+    if average_odds is not None:
+        lines.append(f"📈 Average O2.5 odds: {average_odds:.2f} ({len(decimal_odds)}/{len(selections)} priced)")
     lines.append("")
     for player_name in sorted(by_player.keys()):
         p = by_player[player_name]
@@ -215,6 +249,8 @@ def main() -> int:
         "saturday_date": week.get("saturday_date"),
         "total_selections": len(selections),
         "players_submitted": len(summary.keys()),
+        "average_odds": average_odds,
+        "odds_count": len(decimal_odds),
         "selections": selections_payload,
         "week": {
             "id": week.get("id"),
