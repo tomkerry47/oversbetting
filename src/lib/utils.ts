@@ -1,6 +1,7 @@
 import { addDays, addHours, format, isSaturday, isSunday, nextSaturday } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
-import { Week } from '@/types';
+import { PLAYERS, Week } from '@/types';
+import { calculateAverageOver25Odds, calculateGroupBet, DEFAULT_BET_STAKE } from '@/lib/odds';
 
 const UK_TZ = 'Europe/London';
 
@@ -169,10 +170,15 @@ export function formatSelectionsForCopy(
       home_team: string;
       away_team: string;
       league_name: string;
+      is_star_pick?: boolean;
+      odds_over_25?: string | null;
     };
-  }>
+  }>,
+  week: Pick<Week, 'target_date' | 'target_kickoff_time'>
 ): string {
   const grouped: Record<string, string[]> = {};
+  const { averageOdds, oddsCount } = calculateAverageOver25Odds(selections);
+  const groupBet = calculateGroupBet(selections);
 
   for (const sel of selections) {
     if (!grouped[sel.player_name]) {
@@ -180,23 +186,30 @@ export function formatSelectionsForCopy(
     }
     if (sel.fixture) {
       grouped[sel.player_name].push(
-        `${sel.fixture.home_team} vs ${sel.fixture.away_team} (${toLeagueCode(sel.fixture.league_name)})`
+        `${sel.fixture.is_star_pick ? '⭐ ' : ''}${sel.fixture.home_team} vs ${sel.fixture.away_team} (${toLeagueCode(sel.fixture.league_name)})`
       );
     }
   }
 
-  let text = '⚽ BETTING OVERS - This Week\'s Picks ⚽\n';
-  text += '━━━━━━━━━━━━━━━━━━━━━━━━\n';
+  const lines = ['🎲 All Selections In! 🎲', ''];
+  const roundDate = new Date(`${week.target_date}T12:00:00`).toLocaleDateString('en-GB');
+  lines.push(`📅 Round: ${roundDate} ${formatKickoffTimeLabel(week.target_kickoff_time)}`);
+  if (averageOdds !== null) {
+    lines.push(`📈 Average O2.5 odds: ${averageOdds.toFixed(2)} (${oddsCount}/${selections.length} priced)`);
+    if (groupBet.potentialReturn !== null) {
+      lines.push(`💷 £${DEFAULT_BET_STAKE} bet returns £${groupBet.potentialReturn.toFixed(2)}`);
+    }
+  }
+  lines.push('', '⚽ Picks:', '');
 
-  for (const [player, picks] of Object.entries(grouped)) {
-    text += `\n🏟️ ${player}:\n`;
-    picks.forEach((pick, i) => {
-      text += `  ${i + 1}. ${pick}\n`;
-    });
+  for (const player of PLAYERS) {
+    const picks = grouped[player] || [];
+    if (picks.length === 0) continue;
+    lines.push(`${player}:`);
+    picks.forEach((pick) => lines.push(`• ${pick}`));
+    lines.push('');
   }
 
-  text += '\n━━━━━━━━━━━━━━━━━━━━━━━━';
-  text += '\n💰 Over 2.5 goals to win!';
-
-  return text;
+  lines.push('Good luck!');
+  return lines.join('\n');
 }

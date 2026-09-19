@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, MAX_SELECTIONS_PER_PLAYER, PlayerName } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
-import { toLeagueCode } from '@/lib/utils';
+import { formatSelectionsForCopy, toLeagueCode } from '@/lib/utils';
 import { calculateAverageOver25Odds, calculateGroupBet, DEFAULT_BET_STAKE } from '@/lib/odds';
 
 /**
@@ -263,30 +263,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
       message: '',
     };
 
-    const messageLines: string[] = [];
-    messageLines.push('🎲 All Selections In! 🎲');
-    messageLines.push('');
-    messageLines.push(`📅 Round: ${new Date(week.target_date).toLocaleDateString('en-GB')} ${String(week.target_kickoff_time).slice(0, 5)}`);
-    if (averageOdds !== null) {
-      messageLines.push(`📈 Average O2.5 odds: ${averageOdds.toFixed(2)} (${oddsCount}/${selectionsWithFixtures.length} priced)`);
-      if (groupBet.potentialReturn !== null) {
-        messageLines.push(`💷 £${DEFAULT_BET_STAKE} bet returns £${groupBet.potentialReturn.toFixed(2)}`);
-      }
-    }
-    messageLines.push('');
-    messageLines.push('⚽ Picks:');
-    messageLines.push('');
-    for (const player of PLAYERS) {
-      const picks = payload.summary?.[player] || [];
-      if (!Array.isArray(picks) || picks.length === 0) continue;
-      messageLines.push(`${player}:`);
-      for (const pick of picks) {
-        messageLines.push(`• ${pick.fixture}`);
-      }
-      messageLines.push('');
-    }
-    messageLines.push('Good luck!');
-    payload.message = messageLines.join('\n');
+    payload.message = formatSelectionsForCopy(selectionsWithFixtures, week);
 
     console.log(`Triggering selections webhook for week ${weekId} with ${selections.length} selections`);
     const response = await fetch(webhookUrl, {

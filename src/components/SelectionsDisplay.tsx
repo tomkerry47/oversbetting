@@ -1,6 +1,6 @@
 'use client';
 
-import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS } from '@/types';
+import { MAX_SELECTIONS_PER_PLAYER, Selection, PLAYERS, Week } from '@/types';
 import { formatSelectionsForCopy } from '@/lib/utils';
 import { calculateAverageOver25Odds, calculateGroupBet, DEFAULT_BET_STAKE } from '@/lib/odds';
 import { FixtureDetails, FixtureInsights } from '@/components/FixtureSelector';
@@ -9,9 +9,10 @@ import { createPortal } from 'react-dom';
 
 interface SelectionsDisplayProps {
   selections: Selection[];
+  week: Week;
 }
 
-export default function SelectionsDisplay({ selections }: SelectionsDisplayProps) {
+export default function SelectionsDisplay({ selections, week }: SelectionsDisplayProps) {
   const [copied, setCopied] = useState(false);
   const [activeSelection, setActiveSelection] = useState<Selection | null>(null);
   const [details, setDetails] = useState<FixtureDetails | null>(null);
@@ -38,7 +39,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
   }, {});
 
   const handleCopy = async () => {
-    const text = formatSelectionsForCopy(selections);
+    const text = formatSelectionsForCopy(selections, week);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
