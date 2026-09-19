@@ -242,7 +242,13 @@ export default function HistoryPage() {
 
       <section className="card" aria-label="Betting profit and loss">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Group bets profit / loss</p>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Group bets profit / loss</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              Based on {settledBets} settled group bet{settledBets === 1 ? '' : 's'}; one £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} accumulator per round.
+              {unpricedWinners > 0 && ` ${unpricedWinners} winning round${unpricedWinners === 1 ? '' : 's'} excluded because odds were unavailable.`}
+            </p>
+          </div>
           <label className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
             Stake
             <span className="flex items-center rounded-lg border border-slate-600 bg-slate-900/70 px-2 py-1 text-sm text-white focus-within:border-emerald-500">
@@ -272,10 +278,6 @@ export default function HistoryPage() {
             <span className="font-semibold text-white">£{totalReturn.toFixed(2)}</span>
           </div>
         </div>
-        <p className="mt-2 text-[10px] text-slate-500">
-          Based on {settledBets} settled group bet{settledBets === 1 ? '' : 's'}; one £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} accumulator per round.
-          {unpricedWinners > 0 && ` ${unpricedWinners} winning round${unpricedWinners === 1 ? '' : 's'} excluded because odds were unavailable.`}
-        </p>
       </section>
 
       {weeks.length === 0 ? (
