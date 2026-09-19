@@ -252,8 +252,8 @@ export default function HistoryPage() {
               >
                 <div onClick={() => loadWeekDetails(week.id)}>
                   <div className="flex items-center justify-between">
-                    <div>
-                        <h3 className="text-base font-semibold text-white">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-white">
                         {formatRoundLabel(week)}
                         {week.status === 'active' && (
                           <span className="text-xs text-emerald-400 ml-2">● Active</span>
@@ -276,17 +276,21 @@ export default function HistoryPage() {
                               : `${week.goals_scored}/${week.goals_target} goals`}
                           </span>
                         )}
-                        {week.average_odds !== null && (
-                          <span
-                            className="ml-2 text-xs text-violet-300"
-                            title={`${week.odds_recorded} priced selection${week.odds_recorded === 1 ? '' : 's'}`}
-                          >
-                            📈 {week.average_odds.toFixed(2)} avg odds
-                            {week.potential_return !== null && ` • £${week.stake_amount} group return £${week.potential_return.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                          </span>
-                        )}
                       </h3>
-                      <p className="text-slate-400 text-xs">
+                      {week.average_odds !== null && (
+                        <p
+                          className="mt-1 text-xs font-semibold text-violet-300"
+                          title={`${week.odds_recorded} priced selection${week.odds_recorded === 1 ? '' : 's'}`}
+                        >
+                          📈 {week.average_odds.toFixed(2)} avg odds
+                          {week.potential_return !== null && (
+                            <span className="ml-2 text-emerald-300">
+                              • £{week.stake_amount} group return £{week.potential_return.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-slate-400 text-xs">
                         {new Date(week.target_date).toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'long',
