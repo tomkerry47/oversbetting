@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Week, Selection, Fine, PLAYERS } from '@/types';
 import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
+import { DEFAULT_BET_STAKE } from '@/lib/odds';
 
 type HistoryWeek = Week & {
   goals_scored: number;
@@ -43,6 +44,7 @@ export default function HistoryPage() {
   const [matchStats, setMatchStats] = useState<Record<number, MatchStats>>({});
   const [statsLoading, setStatsLoading] = useState<number | null>(null);
   const [statsErrors, setStatsErrors] = useState<Record<number, string>>({});
+  const [stakeInput, setStakeInput] = useState(String(DEFAULT_BET_STAKE));
 
   useEffect(() => {
     const fetchWeeks = async () => {
@@ -57,6 +59,18 @@ export default function HistoryPage() {
       }
     };
     fetchWeeks();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedStake = localStorage.getItem('historyGroupBetStake');
+      const parsedStake = Number(savedStake);
+      if (savedStake && Number.isFinite(parsedStake) && parsedStake > 0) {
+        setStakeInput(String(parsedStake));
+      }
+    } catch {
+      // Local storage may be unavailable in private browsing modes.
+    }
   }, []);
 
   const loadWeekDetails = async (weekId: number) => {
@@ -196,9 +210,23 @@ export default function HistoryPage() {
 
   const settledBets = weeks.filter((week) => week.group_bet_settled).length;
   const unpricedWinners = weeks.filter((week) => week.unpriced_winner).length;
-  const totalStaked = weeks.reduce((total, week) => total + week.total_staked, 0);
-  const totalReturn = weeks.reduce((total, week) => total + week.total_return, 0);
+  const parsedStake = Number(stakeInput);
+  const stake = Number.isFinite(parsedStake) && parsedStake > 0 ? parsedStake : DEFAULT_BET_STAKE;
+  const totalStaked = settledBets * stake;
+  const totalReturn = weeks.reduce((total, week) => {
+    if (!week.group_bet_settled || week.total_return <= 0 || week.stake_amount <= 0) return total;
+    return total + (week.total_return / week.stake_amount) * stake;
+  }, 0);
   const totalProfitLoss = Number((totalReturn - totalStaked).toFixed(2));
+
+  const updateStake = (value: string) => {
+    if (!/^\d*\.?\d{0,2}$/.test(value)) return;
+    setStakeInput(value);
+    const nextStake = Number(value);
+    if (Number.isFinite(nextStake) && nextStake > 0) {
+      try { localStorage.setItem('historyGroupBetStake', String(nextStake)); } catch { /* ignore */ }
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -213,9 +241,26 @@ export default function HistoryPage() {
       </div>
 
       <section className="card" aria-label="Betting profit and loss">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Group bets profit / loss</p>
+          <label className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+            Stake
+            <span className="flex items-center rounded-lg border border-slate-600 bg-slate-900/70 px-2 py-1 text-sm text-white focus-within:border-emerald-500">
+              £
+              <input
+                type="text"
+                inputMode="decimal"
+                value={stakeInput}
+                onChange={(event) => updateStake(event.target.value)}
+                onBlur={() => setStakeInput(String(stake))}
+                className="w-12 bg-transparent text-right font-bold outline-none"
+                aria-label="Group bet stake"
+              />
+            </span>
+          </label>
+        </div>
+        <div className="mt-2 flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">£5 group bets profit / loss</p>
             <p className={`mt-1 text-2xl font-black ${totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {totalProfitLoss >= 0 ? '+' : '-'}£{Math.abs(totalProfitLoss).toFixed(2)}
             </p>
@@ -228,7 +273,7 @@ export default function HistoryPage() {
           </div>
         </div>
         <p className="mt-2 text-[10px] text-slate-500">
-          Based on {settledBets} settled group bet{settledBets === 1 ? '' : 's'}; one £5 accumulator per round.
+          Based on {settledBets} settled group bet{settledBets === 1 ? '' : 's'}; one £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} accumulator per round.
           {unpricedWinners > 0 && ` ${unpricedWinners} winning round${unpricedWinners === 1 ? '' : 's'} excluded because odds were unavailable.`}
         </p>
       </section>
@@ -285,7 +330,7 @@ export default function HistoryPage() {
                           📈 {week.average_odds.toFixed(2)} avg odds
                           {week.potential_return !== null && (
                             <span className="ml-2 text-emerald-300">
-                              • £{week.stake_amount} group return £{week.potential_return.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              • £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} group return £{((week.potential_return / week.stake_amount) * stake).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           )}
                         </p>
