@@ -220,14 +220,22 @@ def main() -> int:
         )
 
     average_odds = round(sum(decimal_odds) / len(decimal_odds), 2) if decimal_odds else None
-    average_stake_return = round(average_odds * DEFAULT_BET_STAKE, 2) if average_odds is not None else None
+    combined_odds = None
+    potential_return = None
+    if selections and len(decimal_odds) == len(selections):
+        combined_odds_exact = 1.0
+        for price in decimal_odds:
+            combined_odds_exact *= price
+        combined_odds = round(combined_odds_exact, 2)
+        potential_return = round(combined_odds_exact * DEFAULT_BET_STAKE, 2)
 
     lines: List[str] = []
     lines.append(f"📣 Week {week.get('week_number')} status update")
     lines.append(f"📅 {week.get('saturday_date')}")
     if average_odds is not None:
         lines.append(f"📈 Average O2.5 odds: {average_odds:.2f} ({len(decimal_odds)}/{len(selections)} priced)")
-        lines.append(f"💷 £{DEFAULT_BET_STAKE:.0f} return at average odds: £{average_stake_return:.2f}")
+        if potential_return is not None:
+            lines.append(f"💷 £{DEFAULT_BET_STAKE:.0f} group bet return: £{potential_return:.2f}")
     lines.append("")
     for player_name in sorted(by_player.keys()):
         p = by_player[player_name]
@@ -255,7 +263,8 @@ def main() -> int:
         "average_odds": average_odds,
         "odds_count": len(decimal_odds),
         "stake_amount": DEFAULT_BET_STAKE,
-        "average_stake_return": average_stake_return,
+        "combined_odds": combined_odds,
+        "potential_return": potential_return,
         "selections": selections_payload,
         "week": {
             "id": week.get("id"),

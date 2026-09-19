@@ -11,8 +11,10 @@ type HistoryWeek = Week & {
   average_odds: number | null;
   odds_recorded: number;
   stake_amount: number;
-  average_stake_return: number | null;
-  settled_bets: number;
+  combined_odds: number | null;
+  potential_return: number | null;
+  group_bet_settled: boolean;
+  unpriced_winner: boolean;
   total_staked: number;
   total_return: number;
   profit_loss: number;
@@ -192,7 +194,8 @@ export default function HistoryPage() {
     }
   };
 
-  const settledBets = weeks.reduce((total, week) => total + week.settled_bets, 0);
+  const settledBets = weeks.filter((week) => week.group_bet_settled).length;
+  const unpricedWinners = weeks.filter((week) => week.unpriced_winner).length;
   const totalStaked = weeks.reduce((total, week) => total + week.total_staked, 0);
   const totalReturn = weeks.reduce((total, week) => total + week.total_return, 0);
   const totalProfitLoss = Number((totalReturn - totalStaked).toFixed(2));
@@ -212,7 +215,7 @@ export default function HistoryPage() {
       <section className="card" aria-label="Betting profit and loss">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">£5 singles profit / loss</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">£5 group bets profit / loss</p>
             <p className={`mt-1 text-2xl font-black ${totalProfitLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {totalProfitLoss >= 0 ? '+' : '-'}£{Math.abs(totalProfitLoss).toFixed(2)}
             </p>
@@ -224,7 +227,10 @@ export default function HistoryPage() {
             <span className="font-semibold text-white">£{totalReturn.toFixed(2)}</span>
           </div>
         </div>
-        <p className="mt-2 text-[10px] text-slate-500">Based on {settledBets} settled, priced selections. Pending and unpriced matches are excluded.</p>
+        <p className="mt-2 text-[10px] text-slate-500">
+          Based on {settledBets} settled group bet{settledBets === 1 ? '' : 's'}; one £5 accumulator per round.
+          {unpricedWinners > 0 && ` ${unpricedWinners} winning round${unpricedWinners === 1 ? '' : 's'} excluded because odds were unavailable.`}
+        </p>
       </section>
 
       {weeks.length === 0 ? (
@@ -276,7 +282,7 @@ export default function HistoryPage() {
                             title={`${week.odds_recorded} priced selection${week.odds_recorded === 1 ? '' : 's'}`}
                           >
                             📈 {week.average_odds.toFixed(2)} avg odds
-                            {week.average_stake_return !== null && ` • £${week.stake_amount} → £${week.average_stake_return.toFixed(2)}`}
+                            {week.potential_return !== null && ` • £${week.stake_amount} group return £${week.potential_return.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                           </span>
                         )}
                       </h3>

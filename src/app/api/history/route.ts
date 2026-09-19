@@ -5,8 +5,7 @@ import { getActiveRoundWindow } from '@/lib/utils';
 import { GOAL_THRESHOLD, Week } from '@/types';
 import {
   calculateAverageOver25Odds,
-  calculateProfitLoss,
-  calculateStakeReturn,
+  calculateGroupBet,
   DEFAULT_BET_STAKE,
 } from '@/lib/odds';
 
@@ -27,8 +26,7 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
     (selection) => selection.total_goals !== null && selection.total_goals !== undefined
   );
   const { averageOdds, oddsCount } = calculateAverageOver25Odds(weekSelections);
-  const averageStakeReturn = calculateStakeReturn(averageOdds);
-  const profitLoss = calculateProfitLoss(weekSelections);
+  const groupBet = calculateGroupBet(weekSelections);
 
   return {
     ...week,
@@ -44,11 +42,13 @@ function addGoalSummary(week: Week, selections: SelectionGoal[]) {
     average_odds: averageOdds,
     odds_recorded: oddsCount,
     stake_amount: DEFAULT_BET_STAKE,
-    average_stake_return: averageStakeReturn,
-    settled_bets: profitLoss.settledBets,
-    total_staked: profitLoss.totalStaked,
-    total_return: profitLoss.totalReturn,
-    profit_loss: profitLoss.profitLoss,
+    combined_odds: groupBet.combinedOdds,
+    potential_return: groupBet.potentialReturn,
+    group_bet_settled: groupBet.settled,
+    unpriced_winner: groupBet.unpricedWinner,
+    total_staked: groupBet.totalStaked,
+    total_return: groupBet.totalReturn,
+    profit_loss: groupBet.profitLoss,
   };
 }
 

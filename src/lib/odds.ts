@@ -59,26 +59,25 @@ export function calculateAverageOver25Odds(selections: SelectionWithOverOdds[]) 
   };
 }
 
-export function calculateStakeReturn(decimalOdds: number | null, stake = DEFAULT_BET_STAKE) {
-  return decimalOdds === null ? null : roundCurrency(decimalOdds * stake);
-}
+/** Treat every selection as one leg of a single group accumulator. */
+export function calculateGroupBet(selections: SelectionWithOverOdds[], stake = DEFAULT_BET_STAKE) {
+  const odds = selections.map(selectionOdds);
+  const hasAllOdds = selections.length > 0 && odds.every((value): value is number => value !== null);
+  const combinedOdds = hasAllOdds
+    ? odds.reduce((total, value) => total * value, 1)
+    : null;
+  const potentialReturn = combinedOdds === null ? null : roundCurrency(combinedOdds * stake);
+  const hasLost = selections.some((selection) => selection.result === 'lost');
+  const hasAllWon = selections.length > 0 && selections.every((selection) => selection.result === 'won');
+  const settled = hasLost || (hasAllWon && potentialReturn !== null);
+  const totalStaked = settled ? stake : 0;
+  const totalReturn = hasAllWon && potentialReturn !== null ? potentialReturn : 0;
 
-/** Settled singles profit/loss at a fixed stake; pending and unpriced picks are excluded. */
-export function calculateProfitLoss(selections: SelectionWithOverOdds[], stake = DEFAULT_BET_STAKE) {
-  let settledBets = 0;
-  let totalReturn = 0;
-
-  for (const selection of selections) {
-    const odds = selectionOdds(selection);
-    if (odds === null || (selection.result !== 'won' && selection.result !== 'lost')) continue;
-
-    settledBets += 1;
-    if (selection.result === 'won') totalReturn += odds * stake;
-  }
-
-  const totalStaked = settledBets * stake;
   return {
-    settledBets,
+    combinedOdds: combinedOdds === null ? null : Number(combinedOdds.toFixed(2)),
+    potentialReturn,
+    settled,
+    unpricedWinner: hasAllWon && potentialReturn === null,
     totalStaked: roundCurrency(totalStaked),
     totalReturn: roundCurrency(totalReturn),
     profitLoss: roundCurrency(totalReturn - totalStaked),
