@@ -270,7 +270,7 @@ async function triggerWebhook(weekId: number, week: any, selections: any[]) {
     if (averageOdds !== null) {
       messageLines.push(`📈 Average O2.5 odds: ${averageOdds.toFixed(2)} (${oddsCount}/${selectionsWithFixtures.length} priced)`);
       if (groupBet.potentialReturn !== null) {
-        messageLines.push(`💷 £${DEFAULT_BET_STAKE} group bet return: £${groupBet.potentialReturn.toFixed(2)}`);
+        messageLines.push(`💷 £${DEFAULT_BET_STAKE} bet returns £${groupBet.potentialReturn.toFixed(2)}`);
       }
     }
     messageLines.push('');

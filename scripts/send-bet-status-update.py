@@ -235,7 +235,7 @@ def main() -> int:
     if average_odds is not None:
         lines.append(f"📈 Average O2.5 odds: {average_odds:.2f} ({len(decimal_odds)}/{len(selections)} priced)")
         if potential_return is not None:
-            lines.append(f"💷 £{DEFAULT_BET_STAKE:.0f} group bet return: £{potential_return:.2f}")
+            lines.append(f"💷 £{DEFAULT_BET_STAKE:.0f} bet returns £{potential_return:.2f}")
     lines.append("")
     for player_name in sorted(by_player.keys()):
         p = by_player[player_name]

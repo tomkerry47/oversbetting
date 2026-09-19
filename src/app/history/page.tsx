@@ -332,7 +332,7 @@ export default function HistoryPage() {
                           📈 {week.average_odds.toFixed(2)} avg odds
                           {week.potential_return !== null && (
                             <span className="ml-2 text-emerald-300">
-                              • £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} group return £{((week.potential_return / week.stake_amount) * stake).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              • £{stake.toLocaleString('en-GB', { maximumFractionDigits: 2 })} bet returns £{((week.potential_return / week.stake_amount) * stake).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           )}
                         </p>

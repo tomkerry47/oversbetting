@@ -87,7 +87,7 @@ You can format the message in Apple Shortcuts like this:
 
 📅 Saturday: [saturday_date]
 📈 Average O2.5 odds: [average_odds]
-💷 £5 group bet return: [potential_return]
+💷 £5 bet returns £[potential_return]
 
 ⚽️ Picks:
 

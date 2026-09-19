@@ -124,7 +124,7 @@ export default function SelectionsDisplay({ selections }: SelectionsDisplayProps
                 <span title={`${oddsCount}/${selections.length} selections priced`}>
                   {' '}• Avg O2.5 odds <span className="font-semibold text-violet-300">{averageOdds.toFixed(2)}</span>
                   {groupBet.potentialReturn !== null && (
-                    <span className="font-semibold text-emerald-300"> • £{DEFAULT_BET_STAKE} group return £{groupBet.potentialReturn.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-semibold text-emerald-300"> • £{DEFAULT_BET_STAKE} bet returns £{groupBet.potentialReturn.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   )}
                 </span>
               )}
