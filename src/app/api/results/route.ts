@@ -4,6 +4,10 @@ import { fetchFixtureResults } from '@/lib/football-api';
 import { GOAL_THRESHOLD } from '@/types';
 import { isMissingWeekColumnError, normalizeWeek } from '@/lib/week-compat';
 import { bsdMatchStatsSnapshot, fetchBsdMatch, hasBsdMatchStats } from '@/lib/bsd-api';
+import { mapConcurrent } from '@/lib/bsd-refresh';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /**
  * POST /api/results - Check results for the current week's selections.
@@ -15,7 +19,10 @@ export async function POST(request: NextRequest) {
     let weekId: number | null = null;
     try {
       const body = await request.json();
-      weekId = body.week_id;
+      if (body.week_id !== undefined && body.week_id !== null) {
+        weekId = Number(body.week_id);
+        if (!Number.isInteger(weekId) || weekId <= 0) return NextResponse.json({ error: 'Invalid week id' }, { status: 400 });
+      }
     } catch {
       // No body, will use active week
     }
@@ -93,7 +100,9 @@ export async function POST(request: NextRequest) {
     const apiFixtureIds = sofaFixtures.map((f) => f.provider_fixture_id || f.api_fixture_id);
     console.log(`[Results] Fetching results for fixture IDs:`, apiFixtureIds);
     
-    const apiResults = await fetchFixtureResults(apiFixtureIds);
+    const warnings: string[] = [];
+    const apiResults = await fetchFixtureResults(apiFixtureIds, true);
+    for (const id of apiFixtureIds) if (!apiResults.some(r => r.fixture.id === id)) warnings.push(`SofaScore ${id} unavailable`);
     console.log(`[Results] API returned ${apiResults.length} results`);
 
     // Update fixture scores in DB
@@ -107,19 +116,19 @@ export async function POST(request: NextRequest) {
           away_score: result.goals.away,
           match_status: result.fixture.status.short,
         })
-        .eq('api_fixture_id', result.fixture.id);
+        .eq('id', sofaFixtures.find(f => (f.provider_fixture_id || f.api_fixture_id) === result.fixture.id)!.id);
       
       if (updateError) {
-        console.error(`[Results] Error updating fixture ${result.fixture.id}:`, updateError);
+        throw updateError;
       }
     }
 
-    for (const fixture of bsdFixtures) {
+    await mapConcurrent(bsdFixtures, async (fixture) => {
       try {
         const live = await fetchBsdMatch(fixture.bsd_event_id);
         const rawStatus = String(live.status || '').toLowerCase().replaceAll('_', '');
         const status = ['finished', 'ft', 'ended'].includes(rawStatus)
-          ? 'FT' : ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
+          ? 'FT' : ['postponed', 'cancelled', 'canceled', 'pst'].includes(rawStatus) ? 'PST' : ['inprogress', 'live', '1sthalf', '2ndhalf', 'halftime', 'extratime', 'penalties', 'paused'].includes(rawStatus) ? 'LIVE' : 'NS';
         const stats = bsdMatchStatsSnapshot(live);
         const update: Record<string, any> = {
           home_score: live.homeScore, away_score: live.awayScore,
@@ -133,18 +142,23 @@ export async function POST(request: NextRequest) {
         if (updated.error && update.final_stats) {
           delete update.final_stats;
           delete update.stats_updated_at;
-          await supabase.from('fixtures').update(update).eq('id', fixture.id);
+          const fallback = await supabase.from('fixtures').update(update).eq('id', fixture.id);
+          if (fallback.error) throw fallback.error;
+        } else if (updated.error) {
+          throw updated.error;
         }
       } catch (error) {
+        warnings.push(`BSD ${fixture.bsd_event_id} unavailable`);
         console.error(`[Results] BSD fixture ${fixture.bsd_event_id} failed`, error);
       }
-    }
+    });
 
     // Get all selections for the week
-    const { data: selections } = await supabase
+    const { data: selections, error: selectionsError } = await supabase
       .from('selections')
       .select('*, fixture:fixtures(*)')
       .eq('week_id', week.id);
+    if (selectionsError) throw selectionsError;
 
     if (!selections) {
       return NextResponse.json({ error: 'No selections found' }, { status: 404 });
@@ -184,13 +198,14 @@ export async function POST(request: NextRequest) {
       console.log(`[Results] Processing ${sel.player_name}: ${fixture.home_team} ${fixture.home_score}-${fixture.away_score} ${fixture.away_team} (${totalGoals} goals, ${won ? 'WON' : 'LOST'})`);
 
       // Update selection result
-      await supabase
+      const selectionUpdate = await supabase
         .from('selections')
         .update({
           result: won ? 'won' : 'lost',
           total_goals: totalGoals,
         })
         .eq('id', sel.id);
+      if (selectionUpdate.error) throw selectionUpdate.error;
 
       // Check for fines
       if (totalGoals === 0) {
@@ -242,21 +257,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Clear existing fines for this week (in case of re-check) then insert new ones
-    if (fineEntries.length > 0) {
+    {
       console.log(`[Results] Clearing existing fines and inserting ${fineEntries.length} new fines`);
       
-      await supabase
+      const fineDelete = await supabase
         .from('fines')
         .delete()
         .eq('week_id', week.id)
         .eq('cleared', false);
+      if (fineDelete.error) throw fineDelete.error;
 
-      const { error: fineError } = await supabase.from('fines').insert(fineEntries);
-      if (fineError) {
-        console.error(`[Results] Error inserting fines:`, fineError);
+      if (fineEntries.length > 0) {
+        const { error: fineError } = await supabase.from('fines').insert(fineEntries);
+        if (fineError) throw fineError;
       }
-    } else {
-      console.log(`[Results] No fines to apply`);
     }
 
     // Mark week as completed if all selections have been processed
@@ -266,14 +280,16 @@ export async function POST(request: NextRequest) {
       .eq('week_id', week.id);
     
     const hasSelections = allSelections.data && allSelections.data.length > 0;
+    if (allSelections.error) throw allSelections.error;
     const allProcessed = hasSelections && allSelections.data.every(s => s.result !== 'pending');
     
     if (allProcessed) {
       console.log(`[Results] All selections processed - marking week ${week.id} as completed`);
-      await supabase
+      const weekUpdate = await supabase
         .from('weeks')
         .update({ status: 'completed' })
         .eq('id', week.id);
+      if (weekUpdate.error) throw weekUpdate.error;
       week.status = 'completed'; // Update local object
     }
 
@@ -293,6 +309,8 @@ export async function POST(request: NextRequest) {
     console.log(`[Results] Complete. ${finalSelections?.length || 0} selections processed, ${weekFines?.length || 0} fines applied`);
 
     return NextResponse.json({
+      mode: 'direct',
+      warnings,
       week,
       selections: finalSelections,
       fines: weekFines,

@@ -62,17 +62,9 @@ export default function ResultsChecker({ onResultsChecked, hasSelections, weekId
         return;
       }
 
-      if (data.mode === 'direct') {
-        await onResultsChecked();
-        try { localStorage.setItem('resultsUpdatedAt', Date.now().toString()); } catch { /* ignore */ }
-        return;
-      }
-
-      // Poll for up to 45s so users can see updated results without manual refresh.
-      for (let i = 0; i < 9; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        await onResultsChecked();
-      }
+      await onResultsChecked();
+      try { localStorage.setItem('resultsUpdatedAt', Date.now().toString()); } catch { /* ignore */ }
+      if (data.warnings?.length) setError('Some match updates were unavailable. Saved results were retained; try checking again shortly.');
     } catch {
       setError('Network error, please try again');
     } finally {

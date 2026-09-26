@@ -64,12 +64,13 @@ export function createBsdLiveEventStream(eventId: number) {
   });
 }
 
-export async function bsdRequest(path: string, params?: Record<string, string | number>) {
+export async function bsdRequest(path: string, params?: Record<string, string | number>, timeoutMs?: number) {
   const url = new URL(`${BSD_BASE}${path}`);
   Object.entries(params || {}).forEach(([key, value]) => url.searchParams.set(key, String(value)));
   const response = await fetch(url, {
     headers: { Authorization: `Token ${token()}`, Accept: 'application/json' },
     cache: 'no-store',
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
   if (!response.ok) {
     const body = await response.text();
@@ -231,8 +232,8 @@ export async function fetchBsdStats(eventId: number) {
 
 export async function fetchBsdMatch(eventId: number, includeTimeline = false, includeStats = true) {
   const [event, stats, incidents, socket] = await Promise.all([
-    bsdRequest(`/events/${eventId}/`),
-    includeStats ? bsdRequest(`/events/${eventId}/stats/`).catch(() => ({})) : Promise.resolve({}),
+    bsdRequest(`/events/${eventId}/`, undefined, 15000),
+    includeStats ? bsdRequest(`/events/${eventId}/stats/`, undefined, 15000).catch(() => ({})) : Promise.resolve({}),
     includeTimeline ? bsdRequest(`/events/${eventId}/incidents/`).catch(() => ({})) : Promise.resolve({}),
     includeTimeline ? fetchBsdSocketSnapshot(eventId).catch(() => ({ actions: [], event: null })) : Promise.resolve({ actions: [], event: null }),
   ]);

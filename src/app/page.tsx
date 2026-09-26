@@ -403,8 +403,26 @@ export default function HomePage() {
 
   const handleRefreshFixtures = async () => {
     if (fixtures.length > 0) {
-      setLoadingMessage('Refreshing BSD predictions, odds and recent form. SofaScore fixtures will remain unchanged...');
-      await triggerFixtureSync(activeQuery, true);
+      if (!week) return;
+      setRefreshing(true);
+      setError(null);
+      setLoadingMessage('Refreshing BSD fixtures, odds, form and predictions...');
+      try {
+        const { response, data } = await fetchJsonWithTimeout('/api/fixtures/bsd-refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weekId: week.id }),
+        }, 300000);
+        if (!response.ok) throw new Error(data.error || 'BSD refresh failed');
+        await fetchData(activeQuery);
+        setLoadingMessage(`BSD refreshed: ${data.updated} fixtures, ${data.added} added${data.warnings ? `; ${data.warnings} lookups unavailable, cached data retained` : ''}.`);
+        setTimeout(() => setLoadingMessage(''), 10000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'BSD refresh failed');
+        setLoadingMessage('');
+      } finally {
+        setRefreshing(false);
+      }
       return;
     }
     await triggerFixtureSync(activeQuery);

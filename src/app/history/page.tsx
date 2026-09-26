@@ -126,11 +126,7 @@ export default function HistoryPage() {
       });
       const triggerData = await res.json().catch(() => ({}));
       if (res.ok) {
-        // BSD-only rounds complete inline. Hybrid rounds still wait for the
-        // GitHub/SofaScore workflow.
-        const attempts = triggerData.mode === 'direct' ? 1 : 12;
-        for (let i = 0; i < attempts; i++) {
-          if (triggerData.mode !== 'direct') await new Promise((resolve) => setTimeout(resolve, 5000));
+        {
           const dataRes = await fetch(`/api/history?week_id=${weekId}`);
           const data = await dataRes.json();
           setWeekData((prev) => ({
@@ -149,11 +145,12 @@ export default function HistoryPage() {
         }
         // Signal the stats page to refresh its insights.
         try { localStorage.setItem('resultsUpdatedAt', Date.now().toString()); } catch { /* ignore */ }
+        if (triggerData.warnings?.length) setCheckError('Some match updates were unavailable. Saved results were retained; try again shortly.');
       } else {
-        setCheckError(triggerData.error || 'Failed to trigger results workflow');
+        setCheckError(triggerData.error || 'Failed to check results');
       }
     } catch {
-      setCheckError('Network error while triggering results workflow');
+      setCheckError('Network error while checking results');
     } finally {
       setCheckingResults(null);
     }

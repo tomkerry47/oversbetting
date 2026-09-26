@@ -52,7 +52,7 @@ async function sleep(ms: number) {
 const seasonIdCache = new Map<number, { id: number; cachedAt: number }>();
 const SEASON_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-async function rapidApiRequest(endpoint: string) {
+async function rapidApiRequest(endpoint: string, timeoutMs?: number) {
   const apiKey = process.env.RAPIDAPI_KEY;
   if (!apiKey) {
     throw new Error('RAPIDAPI_KEY environment variable is not set');
@@ -66,6 +66,7 @@ async function rapidApiRequest(endpoint: string) {
       'x-rapidapi-key': apiKey,
     },
     next: { revalidate: 0 },
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
 
   if (!res.ok) {
@@ -424,8 +425,16 @@ export async function fetchSaturdayFixtures(date: string): Promise<APIFixture[]>
 /**
  * Fetch live/completed results for specific fixture IDs.
  */
-export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixture[]> {
+export async function fetchFixtureResults(fixtureIds: number[], parallel = false): Promise<APIFixture[]> {
   if (fixtureIds.length === 0) return [];
+  if (parallel && shouldUseRapidApi()) {
+    const results: APIFixture[] = [];
+    for (let i = 0; i < fixtureIds.length; i += 4) {
+      const batch = await Promise.all(fixtureIds.slice(i, i + 4).map(id => fetchFixtureResults([id])));
+      results.push(...batch.flat());
+    }
+    return results;
+  }
   
   console.log(`[fetchFixtureResults] Fetching results for ${fixtureIds.length} fixtures`);
   
@@ -436,7 +445,7 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
     const fixtureId = fixtureIds[i];
     
     // Add longer delays between fixture requests (2-4 seconds)
-    if (i > 0) {
+    if (i > 0 && !shouldUseRapidApi()) {
       const delay = 2000 + Math.random() * 2000; // 2-4 seconds
       console.log(`[fetchFixtureResults] Waiting ${Math.round(delay)}ms before next request...`);
       await sleep(delay);
@@ -445,7 +454,7 @@ export async function fetchFixtureResults(fixtureIds: number[]): Promise<APIFixt
     try {
       console.log(`[fetchFixtureResults] Fetching event ${fixtureId}`);
       const data = shouldUseRapidApi()
-        ? await rapidApiRequest(`/matches/detail?matchId=${fixtureId}`)
+        ? await rapidApiRequest(`/matches/detail?matchId=${fixtureId}`, 15000)
         : await apiRequest(`/event/${fixtureId}`);
       const event = data.event;
       

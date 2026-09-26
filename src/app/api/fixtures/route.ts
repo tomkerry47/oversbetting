@@ -55,7 +55,7 @@ function isSaturdayDateUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-function isFixtureInCustomSlot(kickOff: unknown, targetDate: string, kickoffTime: string) {
+function isFixtureInCustomSlot(kickOff: unknown, targetDate: string, kickoffTime: string, windowMinutes = 15) {
   const date = new Date(String(kickOff || ''));
   if (!Number.isFinite(date.getTime())) return false;
   const ukDate = date.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
@@ -69,7 +69,7 @@ function isFixtureInCustomSlot(kickOff: unknown, targetDate: string, kickoffTime
     const [hours, minutes] = value.split(':').map(Number);
     return (hours * 60) + minutes;
   };
-  return ukDate === targetDate && Math.abs(toMinutes(ukTime) - toMinutes(kickoffTime)) <= 15;
+  return ukDate === targetDate && Math.abs(toMinutes(ukTime) - toMinutes(kickoffTime)) <= windowMinutes;
 }
 
 async function getOrCreateWeek(searchParams: URLSearchParams) {
@@ -272,10 +272,8 @@ export async function GET(request: NextRequest) {
     const availableFixtures = (existingFixtures || []).filter((fixture) =>
       !['PST', 'POSTPONED', 'CANCELLED', 'CANCELED', 'CANC'].includes(
         String(fixture.match_status || '').trim().toUpperCase()));
-    const visibleFixtures = round.isCustom
-      ? availableFixtures.filter((fixture) =>
-          isFixtureInCustomSlot(fixture.kick_off, round.targetDate, round.kickoffTime))
-      : availableFixtures;
+    const visibleFixtures = availableFixtures.filter((fixture) =>
+      isFixtureInCustomSlot(fixture.kick_off, round.targetDate, round.kickoffTime, round.isCustom ? 15 : 0));
 
     if (visibleFixtures && visibleFixtures.length > 0) {
       return NextResponse.json({ week, fixtures: visibleFixtures });
