@@ -221,7 +221,7 @@ export async function fetchBsdScore(eventId: number) {
 }
 
 export async function fetchBsdLiveEvents() {
-  const payload = await bsdRequest('/events/live/');
+  const payload = await bsdRequest('/events/live/', undefined, 10000);
   const events = payload?.events || payload?.results || payload?.data || payload || [];
   return Array.isArray(events) ? events : [];
 }

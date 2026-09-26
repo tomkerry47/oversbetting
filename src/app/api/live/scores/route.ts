@@ -20,7 +20,7 @@ export async function GET() {
     const { startDate, endDate } = getActiveRoundWindow(8, 2);
     const { data: candidateWeeks, error: weekError } = await supabase
       .from('weeks')
-      .select('id,target_date,target_kickoff_time')
+      .select('*')
       .gte('target_date', startDate)
       .lte('target_date', endDate)
       .order('target_date', { ascending: true })
@@ -30,7 +30,7 @@ export async function GET() {
 
     const { data: selections, error } = await supabase
       .from('selections')
-      .select('id,week_id,player_name,fixture_id,fixture:fixtures(id,home_team,away_team,kick_off,home_score,away_score,match_status,data_provider,bsd_event_id)')
+      .select('*, fixture:fixtures(*)')
       .in('week_id', candidateWeeks.map((candidate: any) => candidate.id))
       .order('created_at');
     if (error) throw error;
@@ -45,7 +45,8 @@ export async function GET() {
       ? (selections || []).filter((selection: any) => selection.week_id === week.id)
       : [];
 
-    const liveEvents = await fetchBsdLiveEvents().catch(() => []);
+    const liveEvents = weekSelections.some((selection: any) => selection.fixture?.data_provider === 'bsd')
+      ? await fetchBsdLiveEvents().catch(() => []) : [];
     const liveByEventId = new Map<number, any>(
       liveEvents.map((event: any) => [Number(event.id), event])
     );
@@ -90,7 +91,7 @@ export async function GET() {
     const goals = matches.reduce((sum: number, row: any) =>
       sum + Math.min(3, Number(row.fixture?.home_score || 0) + Number(row.fixture?.away_score || 0)), 0);
 
-    return NextResponse.json({ matches, goals, target: 24, scoreOnly: true, refreshedAt: new Date().toISOString() });
+    return NextResponse.json({ week: week || null, matches, goals, target: 24, scoreOnly: true, refreshedAt: new Date().toISOString() });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Unable to refresh live scores' }, { status: 500 });
   }

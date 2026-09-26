@@ -65,6 +65,7 @@ export default function LivePage() {
   const [data, setData] = useState<any>({ matches: [], goals: 0, target: 24 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState({ percent: 0, message: '' });
   const [error, setError] = useState('');
   const [alerts, setAlerts] = useState<LiveAlert[]>([]);
   const previousScores = useRef<Record<string, number>>({});
@@ -78,10 +79,32 @@ export default function LivePage() {
     setRefreshing(true);
     try {
       const fullRefresh = forceFull || !hasLoaded.current || Date.now() - lastFullRefresh.current >= 60_000;
-      const response = await fetch(fullRefresh ? '/api/live' : '/api/live/scores', { cache: 'no-store' });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Live refresh failed');
-      if (fullRefresh) lastFullRefresh.current = Date.now();
+      setRefreshProgress({ percent: 0, message: fullRefresh ? 'Fetching scores and match stats…' : 'Fetching scores…' });
+      const fetchStage = async (url: string) => {
+        const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Live refresh failed');
+        return body;
+      };
+      // Start both requests immediately. Handle rejection immediately too, so
+      // a failed stats request cannot become an unhandled promise rejection.
+      const statsRequest = fullRefresh ? fetchStage('/api/live').then(body => ({ body, error: null }), error => ({ body: null, error })) : null;
+      for (const stage of fullRefresh ? ['scores', 'stats'] : ['scores']) {
+      let body;
+      if (stage === 'scores') {
+        try {
+          body = await fetchStage('/api/live/scores');
+        } catch (error) {
+          if (!statsRequest) throw error;
+          setRefreshProgress({ percent: 0, message: 'Score feed unavailable · waiting for match updates…' });
+          continue;
+        }
+      } else {
+        const result = await statsRequest!;
+        if (result.error) throw result.error;
+        body = result.body;
+        lastFullRefresh.current = Date.now();
+      }
       const nextScores: Record<string, number> = {};
       const processedFixtures = new Set<string>();
       for (const row of body.matches || []) {
@@ -97,21 +120,22 @@ export default function LivePage() {
         if (hasLoaded.current && !alreadyWon && fixture.data_provider === 'bsd' && previous != null && score > previous) {
           let scorer = 'Goal scored';
           let minute = row.live?.minute != null ? `${row.live.minute}′` : 'Live';
-          try {
+          const alertId = `${fixtureId}-${score}`;
+          setAlerts((current) => current.some((alert) => alert.id === alertId) ? current : [...current, {
+            id: alertId, fixtureId,
+            title: `⚽ ${fixture.home_team} ${fixture.home_score}–${fixture.away_score} ${fixture.away_team}`,
+            detail: `${minute} · ${scorer} · picked by ${row.player_name}`,
+          }]);
+          // Scorer enrichment must never hold up the scoreboard.
+          void (async () => { try {
             const detailResponse = await fetch(`/api/live/${fixtureId}`, { cache: 'no-store' });
             const matchDetail = await detailResponse.json();
             const goals = (matchDetail.live?.keyEvents || []).filter((event: any) => event.type === 'goal');
             const goal = goals.at(-1);
             if (goal?.player) scorer = goal.player;
             if (goal?.minute != null) minute = `${goal.minute}${goal.addedTime ? `+${goal.addedTime}` : ''}′`;
-          } catch { /* Keep the score alert if incident detail is briefly unavailable. */ }
-          const alertId = `${fixtureId}-${score}`;
-          setAlerts((current) => current.some((alert) => alert.id === alertId) ? current : [...current, {
-            id: alertId,
-            fixtureId,
-            title: `⚽ ${fixture.home_team} ${fixture.home_score}–${fixture.away_score} ${fixture.away_team}`,
-            detail: `${minute} · ${scorer} · picked by ${row.player_name}`,
-          }]);
+            setAlerts(current => current.map(alert => alert.id === alertId ? { ...alert, detail: `${minute} · ${scorer} · picked by ${row.player_name}` } : alert));
+          } catch { /* Keep the score alert if incident detail is briefly unavailable. */ } })();
           window.setTimeout(() => setAlerts((current) => current.filter((alert) => alert.id !== alertId)), 15_000);
         }
         if (score >= 3) wonFixtures.current.add(fixtureId);
@@ -158,6 +182,9 @@ export default function LivePage() {
         };
       });
       setError('');
+      setLoading(false);
+      setRefreshProgress({ percent: stage === 'scores' && fullRefresh ? 50 : 100, message: stage === 'scores' && fullRefresh ? 'Scores updated · finishing match stats…' : 'Refresh complete' });
+      }
     } catch (cause: any) { setError(cause.message); }
     finally { setLoading(false); setRefreshing(false); requestInFlight.current = false; }
   }, []);
@@ -220,6 +247,12 @@ export default function LivePage() {
           <div className="text-3xl font-black text-emerald-400">{data.goals || 0}<span className="text-lg text-slate-400">/24</span></div>
         </div>
         <div className="mt-3 h-2.5 rounded-full bg-slate-700 overflow-hidden"><div className="h-full bg-emerald-400 transition-all" style={{ width: `${percentage}%` }} /></div>
+        {refreshing && <div className="mt-2" role="status" aria-live="polite">
+          <div className="flex justify-between gap-2 text-xs text-slate-400"><span>{refreshProgress.message}</span><span>{refreshProgress.percent}%</span></div>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-700" role="progressbar" aria-label="Live refresh progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={refreshProgress.percent}>
+            <div className="h-full bg-sky-400 transition-all" style={{ width: `${refreshProgress.percent}%` }} />
+          </div>
+        </div>}
       </section>
       {error && <div className="rounded-xl border border-red-700 bg-red-950/40 p-3 text-sm text-red-200">{error}</div>}
       {loading ? <div className="text-center text-slate-400 py-12">Loading live matches…</div> : (
