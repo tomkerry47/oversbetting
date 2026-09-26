@@ -415,7 +415,7 @@ export default function HomePage() {
         }, 300000);
         if (!response.ok) throw new Error(data.error || 'BSD refresh failed');
         await fetchData(activeQuery);
-        setLoadingMessage(`BSD refreshed: ${data.updated} fixtures, ${data.added} added${data.warnings ? `; ${data.warnings} lookups unavailable, cached data retained` : ''}.`);
+        setLoadingMessage(`BSD refreshed: ${data.updated} fixtures, ${data.added} added${data.postponed ? `, ${data.postponed} postponed (hidden)` : ''}${data.warnings ? `; ${data.warnings} lookups unavailable, cached data retained` : ''}.`);
         setTimeout(() => setLoadingMessage(''), 10000);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'BSD refresh failed');

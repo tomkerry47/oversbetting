@@ -29,7 +29,10 @@ export async function POST(request: NextRequest) {
     await mapConcurrent(existing || [], async row => {
       if (!events.has(Number(row.bsd_event_id))) {
         try { events.set(Number(row.bsd_event_id), await bsdRequest(`/events/${row.bsd_event_id}/`, undefined, 15000)); }
-        catch { warnings++; }
+        catch (error) {
+          console.warn('[BSD refresh] Fixture lookup unavailable', { eventId: row.bsd_event_id, error: error instanceof Error ? error.message : String(error) });
+          warnings++;
+        }
       }
     });
     const byId = new Map((existing || []).map(r => [Number(r.bsd_event_id), r]));
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
         home_score: event.home_score ?? old?.home_score ?? null, away_score: event.away_score ?? old?.away_score ?? null,
         bsd_live_websocket: Boolean(event.live_websocket), bsd_websocket_plus: Boolean(event.websocket_plus),
       };
-      await enrichBsd(row, event, () => warnings++, cache, deadline);
+      if (row.match_status !== 'PST') await enrichBsd(row, event, () => warnings++, cache, deadline);
       return row;
     });
     const refreshed = rows.filter(Boolean);
@@ -67,7 +70,10 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase.from('fixtures').upsert(payload, { onConflict: 'data_provider,provider_fixture_id' });
       if (error) throw new Error(error.message);
     }
-    return NextResponse.json({ updated: refreshed.length, added: refreshed.filter(r => !byId.has(r.bsd_event_id)).length, warnings });
+    const postponed = refreshed.filter(r => r.match_status === 'PST').length;
+    const added = refreshed.filter(r => !byId.has(r.bsd_event_id)).length;
+    console.info('[BSD refresh] Complete', { weekId, updated: refreshed.length, added, postponed, warnings });
+    return NextResponse.json({ updated: refreshed.length, added, postponed, warnings });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'BSD refresh failed' }, { status: 502 });
   }

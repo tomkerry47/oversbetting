@@ -60,19 +60,28 @@ export async function enrichBsd(row: any, event: any, warning: () => void, cache
     if (!cache.has(key)) cache.set(key, call());
     return cache.get(key)!;
   };
-  const attempt = async (call: () => Promise<void>) => {
-    if (Date.now() >= deadline) { warning(); return; }
-    try { await call(); } catch { warning(); }
+  const attempt = async (lookup: string, call: () => Promise<void>) => {
+    if (Date.now() >= deadline) {
+      console.warn('[BSD refresh] Lookup skipped at deadline', { eventId: row.bsd_event_id, lookup });
+      warning(); return;
+    }
+    try { await call(); } catch (error) {
+      console.warn('[BSD refresh] Lookup unavailable', {
+        eventId: row.bsd_event_id, match: `${row.home_team} vs ${row.away_team}`, lookup,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      warning();
+    }
   };
   const date = String(row.kick_off).slice(0, 10);
-  await attempt(async () => {
+  await attempt('standings', async () => {
     if (!event.season_id) return;
     const p = await cached(`standings:${row.league_id}:${event.season_id}`, () => bsdRequest(`/leagues/${row.league_id}/standings/`, { season_id: event.season_id }, 10000));
     const positions = new Map((p.standings || list(p)).map((s: any) => [Number(s.team_id || s.team?.id), s.position ?? s.rank ?? null]));
     row.home_team_position = positions.get(Number(row.home_team_id)) ?? null;
     row.away_team_position = positions.get(Number(row.away_team_id)) ?? null;
   });
-  for (const side of ['home', 'away']) await attempt(async () => {
+  for (const side of ['home', 'away']) await attempt(`${side} form`, async () => {
     const team = row[`${side}_team_id`];
     if (!team) return;
     const p = await cached(`form:${team}:${row.league_id}:${date}`, () => bsdRequest('/events/', { team_id: team, league_id: row.league_id, status: 'finished', date_to: date, limit: 10, offset: 0 }, 10000));
@@ -84,7 +93,7 @@ export async function enrichBsd(row: any, event: any, warning: () => void, cache
         return { result: diff > 0 ? 'W' : diff < 0 ? 'L' : 'D', homeScore: hs, awayScore: as, opponent: name(home ? e.away_team : e.home_team), opponentPosition: null, homeAway: home ? 'H' : 'A', date: new Date(e.event_date).toLocaleDateString('en-GB', { timeZone: 'UTC' }), competition: row.league_name };
       });
   });
-  await attempt(async () => {
+  await attempt('prediction', async () => {
     const p = await bsdRequest(`/events/${row.bsd_event_id}/prediction/`, undefined, 10000);
     const probability = findNumber(p, ['prob_over_25', 'over_25_probability']);
     if (probability === null) throw new Error('Missing prediction');
@@ -93,7 +102,7 @@ export async function enrichBsd(row: any, event: any, warning: () => void, cache
     const home = findNumber(goals, ['home']), away = findNumber(goals, ['away']);
     row._expected_total_goals = home !== null && away !== null ? home + away : null;
   });
-  await attempt(async () => {
+  await attempt('odds', async () => {
     const odds = list(await bsdRequest('/odds/', { event_id: row.bsd_event_id, market: 'over_under_25', limit: 100 }, 10000));
     const consensus = odds.filter(o => o.bookmaker_slug === 'consensus');
     const selected = consensus.length ? consensus : odds;
