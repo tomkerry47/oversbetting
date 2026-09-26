@@ -267,10 +267,15 @@ export async function GET(request: NextRequest) {
       .order('league_name', { ascending: true })
       .order('home_team', { ascending: true });
 
+    // Keep postponed records for existing picks/history, but never offer them
+    // as available fixtures after a BSD refresh updates their status.
+    const availableFixtures = (existingFixtures || []).filter((fixture) =>
+      !['PST', 'POSTPONED', 'CANCELLED', 'CANCELED', 'CANC'].includes(
+        String(fixture.match_status || '').trim().toUpperCase()));
     const visibleFixtures = round.isCustom
-      ? (existingFixtures || []).filter((fixture) =>
+      ? availableFixtures.filter((fixture) =>
           isFixtureInCustomSlot(fixture.kick_off, round.targetDate, round.kickoffTime))
-      : existingFixtures;
+      : availableFixtures;
 
     if (visibleFixtures && visibleFixtures.length > 0) {
       return NextResponse.json({ week, fixtures: visibleFixtures });

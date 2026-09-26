@@ -886,6 +886,11 @@ def market_over_25_probability(over_odds: Any, under_odds: Any) -> float | None:
 def apply_bsd_star_rankings(rows: List[Dict[str, Any]]) -> None:
     ranked: List[Dict[str, Any]] = []
     for row in rows:
+        if row.get("match_status") == "PST":
+            row["is_star_pick"] = False
+            row["star_rank"] = None
+            row["star_score"] = None
+            continue
         home_form = row.get("home_form") or []
         away_form = row.get("away_form") or []
         combined_form = home_form + away_form
