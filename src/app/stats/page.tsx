@@ -55,8 +55,8 @@ function TeamChoices({ title, choices, outcome }: {
                 </div>
               </div>
               <div className={`shrink-0 text-right text-xs font-bold ${tone}`}>
-                {outcome === 'won' ? choice.win_rate : choice.loss_rate}%
-                <div className="text-[10px] font-normal text-slate-500">{outcome === 'won' ? 'win' : 'loss'} rate</div>
+                {choice.win_rate}%
+                <div className="text-[10px] font-normal text-slate-500">win rate</div>
               </div>
             </li>
           ))}
@@ -460,11 +460,11 @@ export default function StatsPage() {
       <section className="card">
         <h2 className="text-base font-semibold text-white">Group team choices</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Everyone&apos;s picks combined, ranked by win or loss rate. Minimum 5 settled matches per team in the selected period. Shared picks count as one match.
+          Everyone&apos;s picks combined, showing the highest and lowest win rates. Minimum 4 settled matches per team in the selected period. Shared picks count as one match.
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <TeamChoices title="Won — top 3 choices" choices={teamChoices.won} outcome="won" />
-          <TeamChoices title="Lost — top 3 choices" choices={teamChoices.lost} outcome="lost" />
+          <TeamChoices title="Won — top 5 choices" choices={teamChoices.won} outcome="won" />
+          <TeamChoices title="Lost — top 5 choices" choices={teamChoices.lost} outcome="lost" />
         </div>
       </section>
 

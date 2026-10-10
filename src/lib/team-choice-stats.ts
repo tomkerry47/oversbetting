@@ -6,7 +6,7 @@ type TeamSelection = {
   fixture?: { home_team: string | null; away_team: string | null } | null;
 };
 
-export const MIN_TEAM_CHOICE_GAMES = 5;
+export const MIN_TEAM_CHOICE_GAMES = 4;
 
 export function calculateTeamChoices(selections: TeamSelection[]) {
   const teams = new Map<string, TeamChoiceStats>();
@@ -43,7 +43,7 @@ export function calculateTeamChoices(selections: TeamSelection[]) {
     .filter((team) => team[outcome] > 0)
     .sort((a, b) => b[outcome] / b.games - a[outcome] / a.games ||
       b[outcome] - a[outcome] || b.games - a.games || a.team.localeCompare(b.team))
-    .slice(0, 3);
+    .slice(0, 5);
 
   return { won: rank('wins'), lost: rank('losses') };
 }
