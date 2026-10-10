@@ -117,6 +117,15 @@ export interface Fine {
   created_at: string;
 }
 
+export interface TeamChoiceStats {
+  team: string;
+  games: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  loss_rate: number;
+}
+
 export interface PlayerStats {
   player_name: PlayerName;
   total_selections: number;

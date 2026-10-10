@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PLAYERS, PlayerName, PlayerStats } from '@/types';
 import { getActiveRoundWindow } from '@/lib/utils';
+import { calculateTeamChoices } from '@/lib/team-choice-stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,8 @@ export async function GET(request: NextRequest) {
     let selectionsQuery = supabase
       .from('selections')
       .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score), week:weeks!inner(target_date, target_kickoff_time, is_custom, week_number)')
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (player) {
       selectionsQuery = selectionsQuery.eq('player_name', player);
@@ -37,7 +39,14 @@ export async function GET(request: NextRequest) {
       selectionsQuery = selectionsQuery.gte('week.target_date', dateCutoff);
     }
 
-    const { data: allSelections } = await selectionsQuery;
+    // Fetch every page so all-time team records stay complete as history grows.
+    const allSelections: any[] = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await selectionsQuery.range(offset, offset + 999);
+      if (error) throw error;
+      allSelections.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
 
     // Get all fines
     let finesQuery = supabase.from('fines').select('*');
@@ -210,7 +219,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ stats, weeklyBreakdown });
+    return NextResponse.json({ stats, weeklyBreakdown, teamChoices: calculateTeamChoices(allSelections) });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

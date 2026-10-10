@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { PlayerStats, PLAYERS, MAX_SELECTIONS_PER_PLAYER } from '@/types';
+import { PlayerStats, TeamChoiceStats, PLAYERS, MAX_SELECTIONS_PER_PLAYER } from '@/types';
 import { formatKickoffTimeLabel, formatRoundLabel } from '@/lib/utils';
 
 interface WeeklyBreakdown {
@@ -32,9 +32,44 @@ interface WeeklyBreakdown {
   player_results: Record<string, { wins: number; losses: number; pending: number }>;
 }
 
+function TeamChoices({ title, choices, outcome }: {
+  title: string;
+  choices: TeamChoiceStats[];
+  outcome: 'won' | 'lost';
+}) {
+  const tone = outcome === 'won' ? 'text-emerald-400' : 'text-red-400';
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3">
+      <h4 className={`mb-2 text-xs font-bold ${tone}`}>{title}</h4>
+      {choices.length === 0 ? (
+        <p className="text-xs text-slate-500">No qualifying teams yet.</p>
+      ) : (
+        <ol className="space-y-2">
+          {choices.map((choice, index) => (
+            <li key={choice.team} className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-white">{index + 1}. {choice.team}</div>
+                <div className="mt-0.5 text-[10px] text-slate-400">
+                  <span className="text-emerald-400">{choice.wins}W</span>{' · '}
+                  <span className="text-red-400">{choice.losses}L</span>{' · '}{choice.games} games
+                </div>
+              </div>
+              <div className={`shrink-0 text-right text-xs font-bold ${tone}`}>
+                {outcome === 'won' ? choice.win_rate : choice.loss_rate}%
+                <div className="text-[10px] font-normal text-slate-500">{outcome === 'won' ? 'win' : 'loss'} rate</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export default function StatsPage() {
   const [stats, setStats] = useState<PlayerStats[]>([]);
   const [weeklyBreakdown, setWeeklyBreakdown] = useState<WeeklyBreakdown[]>([]);
+  const [teamChoices, setTeamChoices] = useState<{ won: TeamChoiceStats[]; lost: TeamChoiceStats[] }>({ won: [], lost: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
@@ -55,6 +90,7 @@ export default function StatsPage() {
       const data = await res.json();
       setStats(data.stats || []);
       setWeeklyBreakdown(data.weeklyBreakdown || []);
+      setTeamChoices(data.teamChoices || { won: [], lost: [] });
     } catch {
       // ignore
     } finally {
@@ -420,6 +456,17 @@ export default function StatsPage() {
             ))}
         </div>
       </div>
+
+      <section className="card">
+        <h2 className="text-base font-semibold text-white">Group team choices</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          Everyone&apos;s picks combined, ranked by win or loss rate. Minimum 5 settled matches per team in the selected period. Shared picks count as one match.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <TeamChoices title="Won — top 3 choices" choices={teamChoices.won} outcome="won" />
+          <TeamChoices title="Lost — top 3 choices" choices={teamChoices.lost} outcome="lost" />
+        </div>
+      </section>
 
       {/* Weekly Breakdown */}
       {weeklyBreakdown.length > 0 && (
