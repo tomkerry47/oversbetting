@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { bsdMatchStatsSnapshot, fetchBsdMatch, fetchBsdSocketMatches, hasBsdMatchStats, parseBsdMatch } from '@/lib/bsd-api';
+import { bsdMatchStatsSnapshot, fetchBsdMatch, fetchBsdSocketMatches, fetchBsdStats, hasBsdMatchStats, parseBsdMatch } from '@/lib/bsd-api';
 import { fetchFixtureResults } from '@/lib/football-api';
 import { getActiveRoundWindow, getRoundResultsAvailableAt } from '@/lib/utils';
 
@@ -62,6 +62,13 @@ export async function GET() {
       Array.from(new Set<number>(bsdEventIds))
     ).catch(() => ({}));
     const persistedFixtureIds = new Set<number>();
+    const statsRequests = new Map<number, Promise<any>>();
+    const matchStats = (eventId: number) => {
+      if (!statsRequests.has(eventId)) {
+        statsRequests.set(eventId, fetchBsdStats(eventId).then(bsdMatchStatsSnapshot).catch(() => null));
+      }
+      return statsRequests.get(eventId)!;
+    };
 
     const matches = await Promise.all(weekSelections.map(async (selection: any) => {
       const fixture = selection.fixture;
@@ -71,21 +78,23 @@ export async function GET() {
         const socketEvent = socketMatches[Number(fixture.bsd_event_id)];
         live = socketEvent ? parseBsdMatch(socketEvent) : null;
         if (live && fixture.match_status === 'FT') live = { ...live, status: 'finished' };
-        if (live && !persistedFixtureIds.has(fixture.id)) {
+        // The socket snapshot is primarily a score/clock feed. Fetch the
+        // dedicated stats feed even when the socket has no snapshot.
+        const statsDue = !fixture.stats_updated_at ||
+          Date.now() - new Date(fixture.stats_updated_at).getTime() >= ONE_MINUTE;
+        const stats = statsDue ? await matchStats(Number(fixture.bsd_event_id)) : null;
+        if (stats && hasBsdMatchStats(stats)) finalStats = stats;
+        if (!persistedFixtureIds.has(fixture.id)) {
           persistedFixtureIds.add(fixture.id);
-          const stats = bsdMatchStatsSnapshot(live);
-          const nextHomeScore = live.homeScore ?? fixture.home_score ?? 0;
-          const nextAwayScore = live.awayScore ?? fixture.away_score ?? 0;
-          const nextStatus = fixture.match_status === 'FT' ? 'FT' : shortStatus(live.status);
-          const scoreDue =
+          const nextHomeScore = live?.homeScore ?? fixture.home_score ?? 0;
+          const nextAwayScore = live?.awayScore ?? fixture.away_score ?? 0;
+          const nextStatus = fixture.match_status === 'FT' ? 'FT' : shortStatus(live?.status || fixture.match_status);
+          const scoreDue = live && (
             Number(fixture.home_score ?? 0) !== Number(nextHomeScore) ||
             Number(fixture.away_score ?? 0) !== Number(nextAwayScore) ||
             fixture.match_status !== nextStatus ||
             !fixture.live_updated_at ||
-            Date.now() - new Date(fixture.live_updated_at).getTime() >= ONE_MINUTE;
-          const statsDue =
-            !fixture.stats_updated_at ||
-            Date.now() - new Date(fixture.stats_updated_at).getTime() >= ONE_MINUTE;
+            Date.now() - new Date(fixture.live_updated_at).getTime() >= ONE_MINUTE);
           const update: Record<string, any> = {};
           if (scoreDue) {
             update.home_score = nextHomeScore;
@@ -93,7 +102,7 @@ export async function GET() {
             update.match_status = nextStatus;
             update.live_updated_at = new Date().toISOString();
           }
-          if (statsDue && hasBsdMatchStats(stats)) {
+          if (stats && hasBsdMatchStats(stats)) {
             update.final_stats = stats;
             update.stats_updated_at = new Date().toISOString();
             finalStats = stats;
@@ -138,6 +147,7 @@ export async function GET() {
           }
         }
       }
+      if (live && finalStats) live = { ...live, ...finalStats };
       const homeScore = live?.homeScore ?? fixture?.home_score ?? 0;
       const awayScore = live?.awayScore ?? fixture?.away_score ?? 0;
       return { ...selection, fixture: { ...fixture, home_score: homeScore, away_score: awayScore, final_stats: finalStats }, live };

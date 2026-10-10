@@ -73,37 +73,27 @@ export default function LivePage() {
   const hasLoaded = useRef(false);
   const requestInFlight = useRef(false);
   const lastFullRefresh = useRef(0);
+  const statsInFlight = useRef(false);
   const load = useCallback(async (forceFull = false) => {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     setRefreshing(true);
     try {
-      const fullRefresh = forceFull || !hasLoaded.current || Date.now() - lastFullRefresh.current >= 60_000;
-      setRefreshProgress({ percent: 0, message: fullRefresh ? 'Fetching scores and match stats…' : 'Fetching scores…' });
+      const fullRefresh = !statsInFlight.current && (forceFull || !hasLoaded.current || Date.now() - lastFullRefresh.current >= 60_000);
+      if (!statsInFlight.current) setRefreshProgress({ percent: 0, message: fullRefresh ? 'Fetching scores and match stats…' : 'Fetching scores…' });
       const fetchStage = async (url: string) => {
         const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || 'Live refresh failed');
         return body;
       };
-      // Start both requests immediately. Handle rejection immediately too, so
-      // a failed stats request cannot become an unhandled promise rejection.
-      const statsRequest = fullRefresh ? fetchStage('/api/live').then(body => ({ body, error: null }), error => ({ body: null, error })) : null;
-      for (const stage of fullRefresh ? ['scores', 'stats'] : ['scores']) {
+      // Publish scores and clocks before starting the slower stats request.
       let body;
-      if (stage === 'scores') {
-        try {
-          body = await fetchStage('/api/live/scores');
-        } catch (error) {
-          if (!statsRequest) throw error;
-          setRefreshProgress({ percent: 0, message: 'Score feed unavailable · waiting for match updates…' });
-          continue;
-        }
-      } else {
-        const result = await statsRequest!;
-        if (result.error) throw result.error;
-        body = result.body;
-        lastFullRefresh.current = Date.now();
+      try {
+        body = await fetchStage('/api/live/scores');
+      } catch (error) {
+        // The full feed also supports providers outside the fast BSD feed.
+        body = await fetchStage('/api/live');
       }
       const nextScores: Record<string, number> = {};
       const processedFixtures = new Set<string>();
@@ -183,10 +173,44 @@ export default function LivePage() {
       });
       setError('');
       setLoading(false);
-      setRefreshProgress({ percent: stage === 'scores' && fullRefresh ? 50 : 100, message: stage === 'scores' && fullRefresh ? 'Scores updated · finishing match stats…' : 'Refresh complete' });
+      if (fullRefresh) {
+        statsInFlight.current = true;
+        lastFullRefresh.current = Date.now();
+        setRefreshProgress({ percent: 50, message: 'Scores updated · fetching match stats…' });
+        // A separate lock lets five-second score polling continue during stats.
+        void fetchStage('/api/live').then((statsBody) => {
+          lastFullRefresh.current = Date.now();
+          setData((current: any) => {
+            const statsBySelection = new Map((statsBody.matches || []).map((row: any) => [row.id, row]));
+            const matches = (current.matches || []).map((row: any) => {
+              const updated: any = statsBySelection.get(row.id);
+              if (!updated) return row;
+              if (row.fixture.data_provider !== 'bsd') return updated;
+              // Stats responses can arrive after a newer score response. Merge
+              // only statistics so clocks, scores and goal alerts stay current.
+              const stats = updated.fixture.final_stats;
+              return stats ? {
+                ...row,
+                fixture: { ...row.fixture, final_stats: stats, stats_updated_at: updated.fixture.stats_updated_at },
+                live: row.live ? { ...row.live, ...stats } : row.live,
+              } : row;
+            });
+            return { ...current, matches, goals: matches.reduce((sum: number, row: any) =>
+              sum + Math.min(3, Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0)), 0) };
+          });
+          setRefreshProgress({ percent: 100, message: 'Refresh complete' });
+        }).catch((cause) => {
+          lastFullRefresh.current = 0;
+          setError(cause.message);
+        }).finally(() => {
+          statsInFlight.current = false;
+          setRefreshing(requestInFlight.current);
+        });
+      } else if (!statsInFlight.current) {
+        setRefreshProgress({ percent: 100, message: 'Refresh complete' });
       }
     } catch (cause: any) { setError(cause.message); }
-    finally { setLoading(false); setRefreshing(false); requestInFlight.current = false; }
+    finally { setLoading(false); requestInFlight.current = false; setRefreshing(statsInFlight.current); }
   }, []);
 
   useEffect(() => {
@@ -211,7 +235,7 @@ export default function LivePage() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-5 px-0 py-5 pb-24">
-      <div className="fixed right-3 top-3 z-[90] w-[min(24rem,calc(100vw-1.5rem))] space-y-2" aria-live="polite">
+      <div className="live-alerts fixed right-3 z-[90] w-[min(24rem,calc(100vw-1.5rem))] space-y-2 overflow-y-auto" aria-live="polite">
         {alerts.map((alert) => <div key={alert.id} className="relative rounded-xl border border-emerald-500/60 bg-slate-900 shadow-2xl transition hover:border-emerald-300 hover:bg-slate-800">
           <Link href={`/live/${alert.fixtureId}`} className="block p-3 pr-10">
             <div className="text-sm font-bold text-white">{alert.title}</div>

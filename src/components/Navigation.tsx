@@ -17,7 +17,7 @@ export default function Navigation() {
   return (
     <>
       {/* Top bar - slim on mobile */}
-      <header className="bg-slate-900/90 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50">
+      <header className="bg-slate-900/90 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
         <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-center">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-xl">⚽</span>

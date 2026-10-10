@@ -122,3 +122,9 @@ body {
   border-color: rgb(16 185 129 / 1);
   box-shadow: 0 0 0 1px rgb(16 185 129 / 0.35);
 }
+
+/* Keep goal alerts below the iOS status area and sticky app header. */
+.live-alerts {
+  top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 8.5rem);
+}
