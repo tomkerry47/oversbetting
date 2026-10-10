@@ -53,7 +53,7 @@ export default function MatchCentrePage() {
   useEffect(() => {
     load();
     loadStats();
-    const scoreTimer = window.setInterval(loadScore, 5_000);
+    const scoreTimer = window.setInterval(loadScore, 15_000);
     const statsTimer = window.setInterval(loadStats, 60_000);
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') {

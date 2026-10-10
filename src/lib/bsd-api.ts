@@ -217,7 +217,21 @@ export function hasBsdMatchStats(stats: any) {
 }
 
 export async function fetchBsdScore(eventId: number) {
-  return parseBsdMatch(await bsdRequest(`/events/${eventId}/`));
+  return parseBsdMatch(await bsdRequest(`/events/${eventId}/`, undefined, 10000));
+}
+
+// Use the same event snapshots as the match centre. The aggregate live-event
+// list can lag behind goals already delivered through the WebSocket feed.
+export async function fetchBsdRealtimeScores(eventIds: number[]): Promise<Record<number, any>> {
+  const uniqueIds = Array.from(new Set(eventIds));
+  const snapshots = await fetchBsdSocketMatches(uniqueIds).catch(() => ({} as Record<number, any>));
+  const matches = await Promise.all(uniqueIds.map(async (eventId) => {
+    const snapshot = snapshots[eventId] ? parseBsdMatch(snapshots[eventId]) : null;
+    if (snapshot?.homeScore != null && snapshot?.awayScore != null) return [eventId, snapshot] as const;
+    const fallback = await fetchBsdScore(eventId).catch(() => null);
+    return [eventId, fallback] as const;
+  }));
+  return Object.fromEntries(matches.filter(([, match]) => match !== null));
 }
 
 export async function fetchBsdLiveEvents() {

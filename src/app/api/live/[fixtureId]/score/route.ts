@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchBsdScore } from '@/lib/bsd-api';
+import { fetchBsdRealtimeScores } from '@/lib/bsd-api';
 
 export const dynamic = 'force-dynamic';
 const ONE_MINUTE = 60 * 1000;
@@ -27,7 +27,9 @@ export async function GET(_request: NextRequest, { params }: { params: { fixture
       return NextResponse.json({ live: null, message: 'BSD live score unavailable.' });
     }
 
-    let live = await fetchBsdScore(Number(fixture.bsd_event_id));
+    const eventId = Number(fixture.bsd_event_id);
+    let live = (await fetchBsdRealtimeScores([eventId]))[eventId];
+    if (!live) return NextResponse.json({ live: null, message: 'BSD live score temporarily unavailable.' });
     if (fixture.match_status === 'FT') live = { ...live, status: 'finished' };
     const homeScore = live.homeScore ?? fixture.home_score ?? 0;
     const awayScore = live.awayScore ?? fixture.away_score ?? 0;

@@ -5,6 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import LiveMatchClock from '@/components/LiveMatchClock';
 import { mergeBsdLiveEvent } from '@/lib/bsd-live-client';
 
+async function fetchLiveStage(url: string) {
+  const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Live refresh failed');
+  return body;
+}
+
 type LiveAlert = { id: string; fixtureId: string; title: string; detail: string };
 
 function isFinishedMatch(row: any) {
@@ -68,33 +75,55 @@ export default function LivePage() {
   const [refreshProgress, setRefreshProgress] = useState({ percent: 0, message: '' });
   const [error, setError] = useState('');
   const [alerts, setAlerts] = useState<LiveAlert[]>([]);
+  const [scoresRefreshing, setScoresRefreshing] = useState(false);
   const previousScores = useRef<Record<string, number>>({});
   const wonFixtures = useRef<Set<string>>(new Set());
   const hasLoaded = useRef(false);
   const requestInFlight = useRef(false);
   const lastFullRefresh = useRef(0);
   const statsInFlight = useRef(false);
-  const load = useCallback(async (forceFull = false) => {
+  const loadDetails = useCallback(async (force = false) => {
+    if (statsInFlight.current || (!force && Date.now() - lastFullRefresh.current < 60_000)) return;
+    statsInFlight.current = true;
+    setRefreshing(true);
+    setRefreshProgress({ percent: 50, message: 'Fetching match stats…' });
+    try {
+      const statsBody = await fetchLiveStage('/api/live');
+      lastFullRefresh.current = Date.now();
+      setData((current: any) => {
+        if (!(current.matches || []).length) return statsBody;
+        const statsBySelection = new Map((statsBody.matches || []).map((row: any) => [row.id, row]));
+        const matches = (current.matches || []).map((row: any) => {
+          const updated: any = statsBySelection.get(row.id);
+          if (!updated) return row;
+          if (row.fixture.data_provider !== 'bsd') return updated;
+          // Stats responses can arrive after a newer score response. Merge
+          // only statistics so clocks, scores and goal alerts stay current.
+          const stats = updated.fixture.final_stats;
+          return stats ? {
+            ...row,
+            fixture: { ...row.fixture, final_stats: stats, stats_updated_at: updated.fixture.stats_updated_at },
+            live: row.live ? { ...row.live, ...stats } : row.live,
+          } : row;
+        });
+        return { ...current, matches, goals: matches.reduce((sum: number, row: any) =>
+          sum + Math.min(3, Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0)), 0) };
+      });
+      setRefreshProgress({ percent: 100, message: 'Match stats updated' });
+    } catch (cause: any) {
+      lastFullRefresh.current = 0;
+      setError(cause.message);
+    } finally {
+      statsInFlight.current = false;
+      setRefreshing(false);
+    }
+  }, []);
+  const load = useCallback(async (forceFull = false, scoreOnly = false) => {
     if (requestInFlight.current) return;
     requestInFlight.current = true;
-    setRefreshing(true);
+    setScoresRefreshing(true);
     try {
-      const fullRefresh = !statsInFlight.current && (forceFull || !hasLoaded.current || Date.now() - lastFullRefresh.current >= 60_000);
-      if (!statsInFlight.current) setRefreshProgress({ percent: 0, message: fullRefresh ? 'Fetching scores and match stats…' : 'Fetching scores…' });
-      const fetchStage = async (url: string) => {
-        const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Live refresh failed');
-        return body;
-      };
-      // Publish scores and clocks before starting the slower stats request.
-      let body;
-      try {
-        body = await fetchStage('/api/live/scores');
-      } catch (error) {
-        // The full feed also supports providers outside the fast BSD feed.
-        body = await fetchStage('/api/live');
-      }
+      const body = await fetchLiveStage('/api/live/scores');
       const nextScores: Record<string, number> = {};
       const processedFixtures = new Set<string>();
       for (const row of body.matches || []) {
@@ -173,49 +202,19 @@ export default function LivePage() {
       });
       setError('');
       setLoading(false);
-      if (fullRefresh) {
-        statsInFlight.current = true;
-        lastFullRefresh.current = Date.now();
-        setRefreshProgress({ percent: 50, message: 'Scores updated · fetching match stats…' });
-        // A separate lock lets five-second score polling continue during stats.
-        void fetchStage('/api/live').then((statsBody) => {
-          lastFullRefresh.current = Date.now();
-          setData((current: any) => {
-            const statsBySelection = new Map((statsBody.matches || []).map((row: any) => [row.id, row]));
-            const matches = (current.matches || []).map((row: any) => {
-              const updated: any = statsBySelection.get(row.id);
-              if (!updated) return row;
-              if (row.fixture.data_provider !== 'bsd') return updated;
-              // Stats responses can arrive after a newer score response. Merge
-              // only statistics so clocks, scores and goal alerts stay current.
-              const stats = updated.fixture.final_stats;
-              return stats ? {
-                ...row,
-                fixture: { ...row.fixture, final_stats: stats, stats_updated_at: updated.fixture.stats_updated_at },
-                live: row.live ? { ...row.live, ...stats } : row.live,
-              } : row;
-            });
-            return { ...current, matches, goals: matches.reduce((sum: number, row: any) =>
-              sum + Math.min(3, Number(row.fixture.home_score || 0) + Number(row.fixture.away_score || 0)), 0) };
-          });
-          setRefreshProgress({ percent: 100, message: 'Refresh complete' });
-        }).catch((cause) => {
-          lastFullRefresh.current = 0;
-          setError(cause.message);
-        }).finally(() => {
-          statsInFlight.current = false;
-          setRefreshing(requestInFlight.current);
-        });
-      } else if (!statsInFlight.current) {
-        setRefreshProgress({ percent: 100, message: 'Refresh complete' });
-      }
     } catch (cause: any) { setError(cause.message); }
-    finally { setLoading(false); requestInFlight.current = false; setRefreshing(statsInFlight.current); }
-  }, []);
+    finally {
+      setLoading(false);
+      requestInFlight.current = false;
+      setScoresRefreshing(false);
+      // Detail work has its own lock and never holds up a score request.
+      if (!scoreOnly) void loadDetails(forceFull);
+    }
+  }, [loadDetails]);
 
   useEffect(() => {
     load(true);
-    const timer = window.setInterval(() => load(false), 5_000);
+    const timer = window.setInterval(() => load(false), 15_000);
     const refreshWhenVisible = () => { if (document.visibilityState === 'visible') load(false); };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
@@ -255,17 +254,17 @@ export default function LivePage() {
       </div>
       <section className="card overflow-hidden">
         <div className="flex items-end justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold text-white">Live picks</h1>
             <button
               type="button"
               onClick={() => load(true)}
-              disabled={refreshing}
+              disabled={scoresRefreshing}
               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-600 bg-slate-700/60 text-base text-slate-300 transition hover:text-white disabled:opacity-50"
               aria-label="Refresh live matches now"
               title={data.refreshedAt ? `Last updated ${new Date(data.refreshedAt).toLocaleTimeString('en-GB')}` : 'Refresh live matches now'}
             >
-              <span className={refreshing ? 'animate-spin' : ''}>↻</span>
+              <span className={scoresRefreshing ? 'animate-spin' : ''}>↻</span>
             </button>
           </div>
           <div className="text-3xl font-black text-emerald-400">{data.goals || 0}<span className="text-lg text-slate-400">/24</span></div>
