@@ -141,6 +141,7 @@ export interface PlayerStats {
   current_loss_streak: number;
   best_loss_streak: number;
   avg_goals: number;
+  avg_odds: number | null;
 }
 
 export interface WeekSummary {

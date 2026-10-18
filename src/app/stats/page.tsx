@@ -392,7 +392,7 @@ export default function StatsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-4 gap-2 text-center">
                   <div>
                     <div className="text-emerald-400 font-bold text-base">
                       {stat.wins}
@@ -429,6 +429,12 @@ export default function StatsPage() {
                       {stat.avg_goals.toFixed(1)}
                     </div>
                     <div className="text-slate-500 text-[10px]">Avg Goals</div>
+                  </div>
+                  <div title="Average decimal over-2.5 odds across priced picks in the selected period">
+                    <div className="text-purple-400 font-bold text-base">
+                      {stat.avg_odds?.toFixed(2) ?? '—'}
+                    </div>
+                    <div className="text-slate-500 text-[10px]">Avg Odds</div>
                   </div>
                 </div>
 

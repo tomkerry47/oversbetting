@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { PLAYERS, PlayerName, PlayerStats } from '@/types';
 import { getActiveRoundWindow } from '@/lib/utils';
 import { calculateTeamChoices } from '@/lib/team-choice-stats';
+import { calculateAverageOver25Odds } from '@/lib/odds';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     // Get all selections with fixtures
     let selectionsQuery = supabase
       .from('selections')
-      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score), week:weeks!inner(target_date, target_kickoff_time, is_custom, week_number)')
+      .select('*, fixture:fixtures(home_team, away_team, league_name, home_score, away_score, odds_over_25), week:weeks!inner(target_date, target_kickoff_time, is_custom, week_number)')
       .order('created_at', { ascending: true })
       .order('id', { ascending: true });
 
@@ -137,6 +138,7 @@ export async function GET(request: NextRequest) {
       const avgGoals = selectionsWithGoals.length > 0
         ? totalGoals / selectionsWithGoals.length
         : 0;
+      const { averageOdds } = calculateAverageOver25Odds(playerSelections);
 
       stats.push({
         player_name: p,
@@ -153,6 +155,7 @@ export async function GET(request: NextRequest) {
         current_loss_streak: currentLossStreak,
         best_loss_streak: bestLossStreak,
         avg_goals: parseFloat(avgGoals.toFixed(2)),
+        avg_odds: averageOdds,
       });
     }
 
